@@ -7,119 +7,74 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileUp, Loader2 } from 'lucide-react';
+import { FileUp, Loader2, Copy } from 'lucide-react';
 import { PdfViewer } from './PdfViewer';
 import { Toolbar } from './Toolbar';
 import { ChatPanel } from './ChatPanel';
 import { SmartAnnotations } from './SmartAnnotations';
-import type { Annotation, Highlight, ChatMessage, User } from '@/types/hearthlink';
+import type { Annotation, Highlight, ChatMessage, User, Room } from '@/types/hearthlink';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/use-auth';
+import { getRoom, getPdfUrl } from '@/lib/rooms';
 
 // Setup PDF.js worker
 if (typeof window !== 'undefined') {
   pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 }
 
-// Mock data
-const MOCK_USERS: User[] = [
-    { id: 'user-2', name: 'Jane Doe', color: 'hsl(var(--accent))' },
-    { id: 'user-3', name: 'Sam Smith', color: 'hsl(var(--chart-2))' },
-];
-
-const MOCK_ANNOTATIONS: Annotation[] = [
-    { id: 'anno-1', userId: 'user-2', userName: 'Jane Doe', pageNumber: 1, x: 50, y: 20, content: "This is a great opening line!", timestamp: Date.now() - 100000, color: MOCK_USERS[0].color },
-    { id: 'anno-2', userId: 'user-3', userName: 'Sam Smith', pageNumber: 1, x: 70, y: 45, content: "I wonder what this symbolises.", timestamp: Date.now() - 50000, color: MOCK_USERS[1].color },
-];
-
-const MOCK_HIGHLIGHTS: Highlight[] = [
-    { id: 'high-1', userId: 'user-2', userName: 'Jane Doe', pageNumber: 1, rects: [{ x: 48, y: 18, width: 20, height: 2 }], color: 'hsla(var(--accent), 0.3)', timestamp: Date.now() - 90000 },
-];
-
-const MOCK_MESSAGES: ChatMessage[] = [
-    { id: 'msg-1', type: 'system', userId: 'system', userName: 'System', message: 'Jane Doe has joined the room.', timestamp: Date.now() - 200000 },
-    { id: 'msg-2', type: 'text', userId: 'user-2', userName: 'Jane Doe', message: 'Hey everyone! Ready to read?', timestamp: Date.now() - 180000 },
-    { id: 'msg-3', type: 'system', userId: 'system', userName: 'System', message: 'Sam Smith has joined the room.', timestamp: Date.now() - 170000 },
-];
-
-async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
-    const res = await fetch(dataUrl);
-    return await res.blob();
-}
-
 export function ReadingRoom({ roomId }: { roomId: string }) {
+  const { user: currentUser, loading: authLoading } = useAuth();
+  const { toast } = useToast();
+
+  const [room, setRoom] = useState<Room | null>(null);
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [expectedPdfName, setExpectedPdfName] = useState<string>('');
-  const [roomName, setRoomName] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
   const [currentPage, setCurrentPage] = useState(1);
   const [numPages, setNumPages] = useState(0);
   const [zoom, setZoom] = useState(1);
 
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [users, setUsers] = useState<User[]>(MOCK_USERS);
-  const [annotations, setAnnotations] = useState<Annotation[]>(MOCK_ANNOTATIONS);
-  const [highlights, setHighlights] = useState<Highlight[]>(MOCK_HIGHLIGHTS);
-  const [messages, setMessages] = useState<ChatMessage[]>(MOCK_MESSAGES);
-  const { toast } = useToast();
-
-  const handlePdfLoad = useCallback(async (file: File) => {
-    if (expectedPdfName && file.name !== expectedPdfName) {
-        toast({
-            variant: "destructive",
-            title: "Incorrect PDF File",
-            description: `Please upload "${expectedPdfName}". The uploaded file was "${file.name}".`,
-        });
-        return;
-    }
-    
-    setIsLoading(true);
-    const fileReader = new FileReader();
-    fileReader.onload = async (e) => {
-      if (!e.target?.result) return;
-      const typedArray = new Uint8Array(e.target.result as ArrayBuffer);
-      try {
-        const doc = await pdfjsLib.getDocument({ data: typedArray }).promise;
-        setPdfDoc(doc);
-        setNumPages(doc.numPages);
-        setCurrentPage(1);
-        setPdfFile(file);
-        toast({ title: "Book opened!", description: `"${file.name}" is ready for reading.` });
-      } catch (error) {
-        console.error('Error loading PDF:', error);
-        toast({ variant: "destructive", title: "PDF Load Error", description: "Could not load the PDF file. It might be corrupted." });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fileReader.readAsArrayBuffer(file);
-  }, [expectedPdfName, toast]);
+  // For now, collaboration data is local. A real-time db would be next.
+  const [users, setUsers] = useState<User[]>([]);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [highlights, setHighlights] = useState<Highlight[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
 
   useEffect(() => {
-    // Simulate fetching room data and setting up user
-    const storedPdfUrl = sessionStorage.getItem(`pdf_${roomId}`);
-    const storedPdfName = sessionStorage.getItem(`pdf_name_${roomId}`);
-    const storedRoomName = sessionStorage.getItem(`room_name_${roomId}`);
-    
-    setExpectedPdfName(storedPdfName || `a specific PDF for room ${roomId}`);
-    setRoomName(storedRoomName || `Room ${roomId}`);
-    
-    if (storedPdfUrl && storedPdfName) {
-      dataUrlToBlob(storedPdfUrl)
-        .then(blob => {
-          const file = new File([blob], storedPdfName, { type: 'application/pdf' });
-          handlePdfLoad(file);
-        });
-    } else {
-      setIsLoading(false);
+    if (authLoading) return;
+    if (!currentUser) {
+        // Redirect or handle non-authed user
+        return;
     }
 
-    const user: User = { id: 'user-1', name: 'You', color: 'hsl(var(--primary))' };
-    setCurrentUser(user);
-    setUsers(prev => [user, ...prev]);
+    setUsers([currentUser]);
 
-  }, [roomId, handlePdfLoad]);
+    getRoom(roomId)
+      .then(roomData => {
+        if (roomData) {
+          setRoom(roomData);
+          return getPdfUrl(roomData.pdfPath);
+        } else {
+          throw new Error("Room not found. It might have been deleted or the code is incorrect.");
+        }
+      })
+      .then(async (url) => {
+        // pdf.js needs cors enabled on the storage bucket
+        const doc = await pdfjsLib.getDocument(url).promise;
+        setPdfDoc(doc);
+        setNumPages(doc.numPages);
+      })
+      .catch(err => {
+        console.error("Error loading room or PDF:", err);
+        setError(err.message || "Failed to load reading room.");
+        toast({ variant: "destructive", title: "Error", description: err.message });
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+
+  }, [roomId, currentUser, authLoading, toast]);
 
 
   const addAnnotation = (annotation: Omit<Annotation, 'id' | 'userId' | 'userName' | 'timestamp' | 'color'>) => {
@@ -133,7 +88,6 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
       color: currentUser.color,
     };
     setAnnotations(prev => [...prev, newAnnotation]);
-    // Simulate system message
     addMessage({type: 'system', message: `${currentUser.name} added an annotation on page ${annotation.pageNumber}.`})
   };
 
@@ -162,8 +116,13 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
     };
     setMessages(prev => [...prev, newMessage]);
   };
+
+  const copyRoomId = () => {
+    navigator.clipboard.writeText(roomId);
+    toast({ title: "Copied!", description: "Room code copied to clipboard." });
+  }
   
-  if (isLoading) {
+  if (isLoading || authLoading) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background text-foreground">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -172,29 +131,16 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
     );
   }
 
-  if (!pdfDoc) {
+  if (error || !pdfDoc) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-8">
-        <Card className="w-full max-w-lg shadow-xl">
+        <Card className="w-full max-w-lg shadow-xl text-center">
           <CardHeader>
-            <CardTitle className="font-headline text-2xl">Open Your Book</CardTitle>
-            <p className="text-sm text-muted-foreground">To join the "{roomName}" reading session, please select the correct PDF file.</p>
+            <CardTitle className="font-headline text-2xl text-destructive">Error Loading Room</CardTitle>
           </CardHeader>
-          <CardContent className="text-center space-y-4">
-            <p className="font-semibold text-primary">Please upload: <span className="font-bold text-foreground">{expectedPdfName || "the designated book"}</span></p>
-            <Input 
-              id="pdf-upload" 
-              type="file" 
-              accept=".pdf" 
-              className="hidden" 
-              onChange={(e) => e.target.files?.[0] && handlePdfLoad(e.target.files[0])}
-            />
-            <Button asChild className="w-full">
-              <Label htmlFor="pdf-upload" className="cursor-pointer">
-                <FileUp className="mr-2 h-4 w-4" />
-                Select PDF File
-              </Label>
-            </Button>
+          <CardContent>
+            <p>{error || "Could not load the book for this room."}</p>
+            <Button onClick={() => window.location.href = '/'} className="mt-4">Back to Welcome Page</Button>
           </CardContent>
         </Card>
       </div>
@@ -207,6 +153,16 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
         <h2 className="font-headline text-xl font-bold border-b pb-2 mb-4">Smart Tools</h2>
         <SmartAnnotations pdfDoc={pdfDoc} />
         <div className="mt-auto space-y-4">
+            <div className="space-y-2">
+                <h3 className="font-headline text-lg font-bold border-b pb-2">Invite Friends</h3>
+                <p className="text-sm text-muted-foreground">Share this code to invite others:</p>
+                <div className="flex items-center gap-2">
+                    <Input readOnly value={roomId} className="bg-muted"/>
+                    <Button size="icon" variant="ghost" onClick={copyRoomId}>
+                        <Copy className="h-4 w-4" />
+                    </Button>
+                </div>
+            </div>
             <h3 className="font-headline text-lg font-bold border-b pb-2">Readers by the Fire</h3>
             <ul className="space-y-2">
                 {users.map(user => (
@@ -220,7 +176,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
       </aside>
       <main className="flex-1 flex flex-col">
         <header className="flex-shrink-0 border-b p-2 text-center bg-card/80">
-          <h1 className="font-headline text-2xl font-bold">{roomName}</h1>
+          <h1 className="font-headline text-2xl font-bold">{room?.name}</h1>
           <p className="text-sm text-muted-foreground">Page {currentPage} of {numPages}</p>
         </header>
         <div className="flex-1 relative overflow-hidden">

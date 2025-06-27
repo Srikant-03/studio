@@ -38,4 +38,17 @@ export interface User {
     x: number;
     y: number;
   };
+  rooms?: string[]; // Array of room IDs
+  email?: string;
+  photoURL?: string;
+}
+
+export interface Room {
+  id: string;
+  name: string;
+  pdfName: string;
+  pdfPath: string; // path in Firebase Storage
+  creatorId: string;
+  members: string[]; // array of user IDs
+  createdAt: any; // Firestore timestamp
 }
