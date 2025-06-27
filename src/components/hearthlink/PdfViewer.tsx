@@ -1,13 +1,9 @@
 "use client";
 
-import { useRef, useEffect, useState, useCallback } from 'react';
-import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
+import { useRef, useEffect, useState } from 'react';
+import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import type { Annotation, Highlight, User } from '@/types/hearthlink';
 import { useToast } from '@/hooks/use-toast';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Textarea } from '@/components/ui/textarea';
-import { Button } from '@/components/ui/button';
-import { Plus } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface PdfViewerProps {
@@ -24,51 +20,71 @@ interface PdfViewerProps {
 export function PdfViewer({ pdfDoc, currentPage, zoom, annotations, highlights, addAnnotation, addHighlight, currentUser }: PdfViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const renderTaskRef = useRef<RenderTask | null>(null);
   const [isDrawingHighlight, setIsDrawingHighlight] = useState(false);
   const [highlightStart, setHighlightStart] = useState<{x: number, y: number} | null>(null);
   const [highlightEnd, setHighlightEnd] = useState<{x: number, y: number} | null>(null);
   const { toast } = useToast();
 
-  const renderPage = useCallback(async () => {
-    if (!pdfDoc || !canvasRef.current || !containerRef.current) return;
-    try {
-      const page = await pdfDoc.getPage(currentPage);
-      const viewport = page.getViewport({ scale: zoom });
-      const canvas = canvasRef.current;
-      const context = canvas.getContext('2d');
-
-      canvas.height = viewport.height;
-      canvas.width = viewport.width;
-
-      containerRef.current.style.height = `${viewport.height}px`;
-      containerRef.current.style.width = `${viewport.width}px`;
+  useEffect(() => {
+    const renderPage = async () => {
+      if (!pdfDoc || !canvasRef.current || !containerRef.current) return;
       
-      if(context){
-        const renderContext = {
-          canvasContext: context,
-          viewport: viewport,
-        };
-        await page.render(renderContext).promise;
+      // Cancel previous render task if it exists
+      if (renderTaskRef.current) {
+        renderTaskRef.current.cancel();
       }
-    } catch (error) {
-      console.error('Error rendering page:', error);
-      toast({ variant: "destructive", title: "Render Error", description: `Could not render page ${currentPage}.` });
-    }
+
+      try {
+        const page = await pdfDoc.getPage(currentPage);
+        const viewport = page.getViewport({ scale: zoom });
+        const canvas = canvasRef.current;
+        const context = canvas.getContext('2d');
+
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+
+        containerRef.current.style.height = `${viewport.height}px`;
+        containerRef.current.style.width = `${viewport.width}px`;
+        
+        if(context){
+          const renderContext = {
+            canvasContext: context,
+            viewport: viewport,
+          };
+          
+          const task = page.render(renderContext);
+          renderTaskRef.current = task;
+          await task.promise;
+        }
+      } catch (error: any) {
+        // pdf.js throws a "RenderingCancelledException" which we can ignore.
+        if (error.name !== 'RenderingCancelledException') {
+            console.error('Error rendering page:', error);
+            toast({ variant: "destructive", title: "Render Error", description: `Could not render page ${currentPage}.` });
+        }
+      } finally {
+        renderTaskRef.current = null;
+      }
+    };
+    
+    renderPage();
+
+    return () => {
+        if (renderTaskRef.current) {
+            renderTaskRef.current.cancel();
+            renderTaskRef.current = null;
+        }
+    };
   }, [pdfDoc, currentPage, zoom, toast]);
 
-  useEffect(() => {
-    renderPage();
-  }, [renderPage]);
-
   const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target !== e.currentTarget) return; // ignore clicks on annotations
+    if (e.target !== e.currentTarget) return;
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
     const y = ((e.clientY - rect.top) / rect.height) * 100;
     
-    // Simple popover to add annotation
-    // In a real app this would be a more complex modal or inline form
     const content = prompt("Enter annotation text:");
     if (content) {
       addAnnotation({
@@ -81,7 +97,7 @@ export function PdfViewer({ pdfDoc, currentPage, zoom, annotations, highlights, 
   };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!e.altKey || !containerRef.current) return; // Use Alt key to start highlighting
+    if (!e.altKey || !containerRef.current) return;
     e.preventDefault();
     setIsDrawingHighlight(true);
     const rect = containerRef.current.getBoundingClientRect();
