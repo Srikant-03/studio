@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import { onAuthStateChanged, GoogleAuthProvider, signInWithRedirect, signOut } from 'firebase/auth';
+import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
@@ -10,7 +10,7 @@ import { User } from '@/types/hearthlink';
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  signInWithGoogle: () => void;
+  signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -59,12 +59,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  const signInWithGoogle = () => {
+  const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
     try {
-      signInWithRedirect(auth, provider);
+      await signInWithPopup(auth, provider);
     } catch (error) {
       console.error("Error signing in with Google", error);
+      throw error; // Re-throw the error to be caught by the caller
     }
   };
 
