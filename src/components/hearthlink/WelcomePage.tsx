@@ -12,6 +12,7 @@ import { FileUp, Loader2, Book, LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { createRoom, joinRoom, getUserRooms } from "@/lib/rooms";
 import type { Room } from "@/types/hearthlink";
+import { ScrollArea } from "../ui/scroll-area";
 
 export function WelcomePage() {
   const router = useRouter();
@@ -49,7 +50,7 @@ export function WelcomePage() {
     if (roomName && pdfFile && user) {
       setIsCreating(true);
       try {
-        const newRoomId = await createRoom(roomName, pdfFile, user.id);
+        const newRoomId = await createRoom(roomName, pdfFile.name, user.id);
         router.push(`/room/${newRoomId}`);
       } catch (error) {
         console.error("Failed to create room:", error);

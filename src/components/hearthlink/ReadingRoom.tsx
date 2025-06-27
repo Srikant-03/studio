@@ -6,8 +6,8 @@ import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileUp, Loader2, Copy } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { FileUp, Loader2, Copy, BookOpen } from 'lucide-react';
 import { PdfViewer } from './PdfViewer';
 import { Toolbar } from './Toolbar';
 import { ChatPanel } from './ChatPanel';
@@ -15,7 +15,7 @@ import { SmartAnnotations } from './SmartAnnotations';
 import type { Annotation, Highlight, ChatMessage, User, Room } from '@/types/hearthlink';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
-import { getRoom, getPdfUrl } from '@/lib/rooms';
+import { getRoom } from '@/lib/rooms';
 
 // Setup PDF.js worker
 if (typeof window !== 'undefined') {
@@ -30,6 +30,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   
   const [currentPage, setCurrentPage] = useState(1);
   const [numPages, setNumPages] = useState(0);
@@ -54,16 +55,9 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
       .then(roomData => {
         if (roomData) {
           setRoom(roomData);
-          return getPdfUrl(roomData.pdfPath);
         } else {
           throw new Error("Room not found. It might have been deleted or the code is incorrect.");
         }
-      })
-      .then(async (url) => {
-        // pdf.js needs cors enabled on the storage bucket
-        const doc = await pdfjsLib.getDocument(url).promise;
-        setPdfDoc(doc);
-        setNumPages(doc.numPages);
       })
       .catch(err => {
         console.error("Error loading room or PDF:", err);
@@ -117,6 +111,35 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
     setMessages(prev => [...prev, newMessage]);
   };
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !room) return;
+
+    if (file.name !== room.pdfName) {
+      const errorMsg = `Incorrect file. Please select "${room.pdfName}".`;
+      setUploadError(errorMsg);
+      toast({ variant: "destructive", title: "Wrong File", description: errorMsg });
+      return;
+    }
+
+    setUploadError(null);
+    setIsLoading(true);
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      setPdfDoc(doc);
+      setNumPages(doc.numPages);
+    } catch (err) {
+      console.error("Error loading local PDF:", err);
+      const errorMsg = "Could not read the selected PDF file.";
+      setUploadError(errorMsg);
+      toast({ variant: "destructive", title: "PDF Error", description: errorMsg });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const copyRoomId = () => {
     navigator.clipboard.writeText(roomId);
     toast({ title: "Copied!", description: "Room code copied to clipboard." });
@@ -131,7 +154,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
     );
   }
 
-  if (error || !pdfDoc) {
+  if (error) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-8">
         <Card className="w-full max-w-lg shadow-xl text-center">
@@ -139,8 +162,35 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
             <CardTitle className="font-headline text-2xl text-destructive">Error Loading Room</CardTitle>
           </CardHeader>
           <CardContent>
-            <p>{error || "Could not load the book for this room."}</p>
+            <p>{error}</p>
             <Button onClick={() => window.location.href = '/'} className="mt-4">Back to Welcome Page</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!pdfDoc) {
+     return (
+      <div className="flex h-screen w-full items-center justify-center bg-background text-foreground">
+        <Card className="w-full max-w-lg shadow-xl">
+          <CardHeader className="text-center">
+            <CardTitle className="font-headline text-3xl">Load Your Book</CardTitle>
+            <CardDescription>This room is for reading <span className="font-bold text-primary">{room?.pdfName}</span>. Please select it from your device to continue.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-lg border-2 border-dashed border-border p-6 text-center">
+              <BookOpen className="mx-auto h-12 w-12 text-muted-foreground"/>
+              <p className="mt-2 font-semibold">Select "{room?.pdfName}"</p>
+            </div>
+            <Input id="pdf-upload" type="file" accept=".pdf" onChange={handleFileSelect} className="hidden"/>
+            <Button onClick={() => document.getElementById('pdf-upload')?.click()} className="w-full">
+              <FileUp className="mr-2 h-4 w-4"/>
+              Choose File from Computer
+            </Button>
+            {uploadError && (
+              <p className="text-sm font-medium text-destructive">{uploadError}</p>
+            )}
           </CardContent>
         </Card>
       </div>

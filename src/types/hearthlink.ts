@@ -47,7 +47,6 @@ export interface Room {
   id: string;
   name: string;
   pdfName: string;
-  pdfPath: string; // path in Firebase Storage
   creatorId: string;
   members: string[]; // array of user IDs
   createdAt: any; // Firestore timestamp

@@ -1,4 +1,4 @@
-import { db, storage } from '@/lib/firebase';
+import { db } from '@/lib/firebase';
 import {
   collection,
   addDoc,
@@ -11,31 +11,24 @@ import {
   where,
   getDocs,
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import type { Room } from '@/types/hearthlink';
 
 export async function createRoom(
   roomName: string,
-  pdfFile: File,
+  pdfName: string,
   userId: string
 ): Promise<string> {
-  // 1. Upload PDF to Firebase Storage
-  const pdfPath = `pdfs/${userId}/${Date.now()}-${pdfFile.name}`;
-  const storageRef = ref(storage, pdfPath);
-  await uploadBytes(storageRef, pdfFile);
-
-  // 2. Create room document in Firestore
+  // Create room document in Firestore
   const roomData = {
     name: roomName,
-    pdfName: pdfFile.name,
-    pdfPath: pdfPath,
+    pdfName: pdfName,
     creatorId: userId,
     members: [userId],
     createdAt: serverTimestamp(),
   };
   const roomRef = await addDoc(collection(db, 'rooms'), roomData);
 
-  // 3. Add room to user's room list
+  // Add room to user's room list
   const userRef = doc(db, 'users', userId);
   await updateDoc(userRef, {
     rooms: arrayUnion(roomRef.id),
@@ -44,7 +37,7 @@ export async function createRoom(
   return roomRef.id;
 }
 
-export async function joinRoom(roomId: string, userId: string): Promise<boolean> {
+export async function joinRoom(roomId: string, userId:string): Promise<boolean> {
     const roomRef = doc(db, 'rooms', roomId);
     const roomSnap = await getDoc(roomRef);
 
@@ -94,9 +87,4 @@ export async function getRoom(roomId: string): Promise<Room | null> {
     } else {
         return null;
     }
-}
-
-export async function getPdfUrl(pdfPath: string): Promise<string> {
-    const storageRef = ref(storage, pdfPath);
-    return await getDownloadURL(storageRef);
 }
