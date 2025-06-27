@@ -7,6 +7,7 @@ import 'react-pdf/dist/esm/Page/TextLayer.css';
 import type { Annotation, Highlight, User } from '@/types/hearthlink';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Loader2 } from 'lucide-react';
+import type { PDFPageProxy } from 'pdfjs-dist';
 
 interface PdfViewerProps {
   pdfData: ArrayBuffer;
@@ -17,9 +18,10 @@ interface PdfViewerProps {
   addAnnotation: (annotation: Omit<Annotation, 'id' | 'userId' | 'userName' | 'timestamp' | 'color'>) => void;
   addHighlight: (highlight: Omit<Highlight, 'id' | 'userId' | 'userName' | 'timestamp' | 'color'>) => void;
   currentUser: User | null;
+  onPageLoadSuccess: (page: PDFPageProxy) => void;
 }
 
-export function PdfViewer({ pdfData, currentPage, zoom, annotations, highlights, addAnnotation, addHighlight, currentUser }: PdfViewerProps) {
+export function PdfViewer({ pdfData, currentPage, zoom, annotations, highlights, addAnnotation, addHighlight, currentUser, onPageLoadSuccess }: PdfViewerProps) {
   const pageWrapperRef = useRef<HTMLDivElement>(null);
   const [isDrawingHighlight, setIsDrawingHighlight] = useState(false);
   const [highlightStart, setHighlightStart] = useState<{x: number, y: number} | null>(null);
@@ -104,6 +106,7 @@ export function PdfViewer({ pdfData, currentPage, zoom, annotations, highlights,
                     scale={zoom}
                     renderTextLayer={false}
                     renderAnnotationLayer={false}
+                    onLoadSuccess={onPageLoadSuccess}
                 />
             </Document>
         </div>

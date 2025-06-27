@@ -131,9 +131,11 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
 
     try {
       const arrayBuffer = await file.arrayBuffer();
-      setPdfData(arrayBuffer); // Set raw data for react-pdf
       
-      // Still need pdfDoc for text extraction in SmartAnnotations
+      // Pass a copy to react-pdf for rendering to avoid detached buffer error.
+      setPdfData(arrayBuffer.slice(0));
+      
+      // Use the original (or another copy) for text extraction.
       const doc = await pdfjs.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
       setPdfDoc(doc);
       setNumPages(doc.numPages);
@@ -246,6 +248,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
                 addAnnotation={addAnnotation}
                 addHighlight={addHighlight}
                 currentUser={currentUser}
+                onPageLoadSuccess={(page) => setNumPages(page.doc.numPages)}
             />
         </div>
         <Toolbar
