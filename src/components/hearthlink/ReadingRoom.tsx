@@ -92,7 +92,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
 
   // Firestore listeners for real-time collaboration
   useEffect(() => {
-    if (!roomId) return;
+    if (!roomId || !currentUser) return;
 
     // Listener for Annotations
     const annotationsRef = collection(db, 'rooms', roomId, 'annotations');
@@ -130,7 +130,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
         unsubscribeHighlights();
         unsubscribeMessages();
     };
-  }, [roomId, toast]);
+  }, [roomId, currentUser, toast]);
 
   const addAnnotation = async (annotation: Omit<Annotation, 'id' | 'userId' | 'userName' | 'timestamp' | 'color'>) => {
     if (!currentUser || !roomId) return;
