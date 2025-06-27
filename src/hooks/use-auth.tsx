@@ -10,7 +10,7 @@ import { User } from '@/types/hearthlink';
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: () => void;
   logout: () => Promise<void>;
 }
 
@@ -59,10 +59,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = () => {
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithRedirect(auth, provider);
+      signInWithRedirect(auth, provider);
     } catch (error) {
       console.error("Error signing in with Google", error);
     }
