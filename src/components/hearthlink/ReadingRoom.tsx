@@ -50,7 +50,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
 
   // Page persistence logic
   useEffect(() => {
-    if (!roomId) return;
+    if (!roomId || currentPage === 1) return; // Don't save initial state
     localStorage.setItem(`hearthlink-lastpage-${roomId}`, String(currentPage));
   }, [currentPage, roomId]);
   
@@ -58,11 +58,17 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
     if (authLoading || !currentUser) {
         return;
     }
+
+    // This effect handles fetching the room data and setting up all real-time listeners.
+    // It runs once the user is authenticated.
     
     // Restore last viewed page once authenticated
     const lastPage = localStorage.getItem(`hearthlink-lastpage-${roomId}`);
     if (lastPage) {
-      setCurrentPage(parseInt(lastPage, 10));
+      const pageNumber = parseInt(lastPage, 10);
+      if (!isNaN(pageNumber) && pageNumber > 0) {
+        setCurrentPage(pageNumber);
+      }
     }
 
     setUsers([currentUser]);
@@ -90,7 +96,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
         setIsLoading(false);
       });
 
-  }, [roomId, currentUser, authLoading, toast]);
+  }, [roomId, currentUser, authLoading]);
 
   // Firestore listeners for real-time collaboration
   useEffect(() => {
@@ -144,7 +150,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
         unsubscribeMessages();
         unsubscribeBookmarks();
     };
-  }, [roomId, currentUser, toast]);
+  }, [roomId, currentUser]);
 
   const addAnnotation = async (annotation: Omit<Annotation, 'id' | 'userId' | 'userName' | 'timestamp' | 'color'>) => {
     if (!currentUser || !roomId) return;

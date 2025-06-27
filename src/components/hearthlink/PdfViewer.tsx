@@ -52,7 +52,7 @@ function SinglePageView({ pageNumber, zoom, annotations, highlights, addAnnotati
   const [annotationContent, setAnnotationContent] = useState('');
   
   const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (interactionMode !== 'annotate' || e.target !== e.currentTarget || pendingAnnotation) return;
+    if (interactionMode !== 'annotate' || pendingAnnotation) return;
     if (!pageWrapperRef.current) return;
     
     const rect = pageWrapperRef.current.getBoundingClientRect();
