@@ -5,6 +5,15 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ArrowLeft, ArrowRight, ZoomIn, ZoomOut, Lamp, PanelLeft, PanelsLeftRight, Highlighter, MessageSquarePlus, Bookmark, BookmarkCheck } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+const HIGHLIGHT_COLORS = [
+    { name: 'Yellow', color: 'hsla(50, 100%, 50%, 0.4)' },
+    { name: 'Pink', color: 'hsla(320, 100%, 70%, 0.4)' },
+    { name: 'Cyan', color: 'hsla(180, 100%, 60%, 0.4)' },
+    { name: 'Green', color: 'hsla(120, 100%, 50%, 0.4)' },
+    { name: 'Orange', color: 'hsla(25, 100%, 60%, 0.4)' },
+];
 
 interface ToolbarProps {
   currentPage: number;
@@ -18,6 +27,8 @@ interface ToolbarProps {
   setInteractionMode: (mode: 'annotate' | 'highlight' | 'none') => void;
   toggleBookmark: () => void;
   isPageBookmarked: boolean;
+  highlightColor: string;
+  setHighlightColor: (color: string) => void;
 }
 
 export function Toolbar({ 
@@ -31,7 +42,9 @@ export function Toolbar({
   interactionMode,
   setInteractionMode,
   toggleBookmark,
-  isPageBookmarked
+  isPageBookmarked,
+  highlightColor,
+  setHighlightColor
 }: ToolbarProps) {
   const handlePageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let newPage = parseInt(e.target.value, 10);
@@ -46,7 +59,7 @@ export function Toolbar({
   const pageIncrement = isDualPage ? 2 : 1;
 
   return (
-    <div className="flex-shrink-0 flex items-center justify-center gap-4 p-2 border-t bg-card/80">
+    <div className="flex-shrink-0 flex items-center justify-center gap-4 p-2 border-t bg-card/80 flex-wrap">
       <TooltipProvider>
         <div className="flex items-center gap-2">
           <Tooltip>
@@ -137,6 +150,27 @@ export function Toolbar({
               <TooltipContent>{isPageBookmarked ? 'Remove Bookmark' : 'Bookmark Page'}</TooltipContent>
           </Tooltip>
         </div>
+        
+        {interactionMode === 'highlight' && (
+          <div className="flex items-center gap-2">
+              <Separator orientation="vertical" className="h-6" />
+              {HIGHLIGHT_COLORS.map(c => (
+                  <Tooltip key={c.name}>
+                      <TooltipTrigger asChild>
+                          <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className={cn("w-6 h-6 rounded-full p-0 border-2", highlightColor === c.color ? 'border-primary' : 'border-transparent')}
+                              onClick={() => setHighlightColor(c.color)}
+                          >
+                            <div className="w-4 h-4 rounded-full" style={{ backgroundColor: c.color.replace('0.4', '1') }}></div>
+                          </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>{c.name}</TooltipContent>
+                  </Tooltip>
+              ))}
+          </div>
+        )}
 
         <Separator orientation="vertical" className="h-6" />
 

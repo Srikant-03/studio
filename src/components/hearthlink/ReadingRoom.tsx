@@ -38,7 +38,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
   const [zoom, setZoom] = useState(1);
   const [isDualPage, setIsDualPage] = useState(false);
   const [interactionMode, setInteractionMode] = useState<'annotate' | 'highlight' | 'none'>('none');
-
+  const [highlightColor, setHighlightColor] = useState('hsla(50, 100%, 50%, 0.4)'); // Default: yellow highlight
 
   // Collaboration data is now fetched from Firestore in real-time
   const [users, setUsers] = useState<User[]>([]);
@@ -51,20 +51,18 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
   // Page persistence logic
   useEffect(() => {
     if (!roomId) return;
-    const lastPage = localStorage.getItem(`hearthlink-lastpage-${roomId}`);
-    if (lastPage) {
-      setCurrentPage(parseInt(lastPage, 10));
-    }
-  }, [roomId]);
-
-  useEffect(() => {
-    if (!roomId) return;
     localStorage.setItem(`hearthlink-lastpage-${roomId}`, String(currentPage));
   }, [currentPage, roomId]);
   
   useEffect(() => {
     if (authLoading || !currentUser) {
         return;
+    }
+    
+    // Restore last viewed page once authenticated
+    const lastPage = localStorage.getItem(`hearthlink-lastpage-${roomId}`);
+    if (lastPage) {
+      setCurrentPage(parseInt(lastPage, 10));
     }
 
     setUsers([currentUser]);
@@ -175,7 +173,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
           userId: currentUser.id,
           userName: currentUser.name,
           timestamp: Date.now(),
-          color: `${currentUser.color.replace('hsl', 'hsla').replace(')', ', 0.3)')}`,
+          color: highlightColor,
         });
     } catch (error) {
         console.error("Error adding highlight:", error);
@@ -403,6 +401,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
                 isDualPage={isDualPage}
                 numPages={numPages}
                 interactionMode={interactionMode}
+                highlightColor={highlightColor}
             />
         </div>
         <Toolbar
@@ -417,6 +416,8 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
           setInteractionMode={setInteractionMode}
           toggleBookmark={toggleBookmark}
           isPageBookmarked={isPageBookmarked}
+          highlightColor={highlightColor}
+          setHighlightColor={setHighlightColor}
         />
       </main>
       <ChatPanel messages={messages} addMessage={addMessage} currentUser={currentUser} />

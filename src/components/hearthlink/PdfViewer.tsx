@@ -8,6 +8,9 @@ import type { Annotation, Highlight, User } from '@/types/hearthlink';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Loader2 } from 'lucide-react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
 
 // This is required for react-pdf to work
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -25,6 +28,7 @@ interface PdfViewerProps {
   isDualPage: boolean;
   numPages: number;
   interactionMode: 'annotate' | 'highlight' | 'none';
+  highlightColor: string;
 }
 
 interface SinglePageViewProps {
@@ -36,31 +40,43 @@ interface SinglePageViewProps {
   addHighlight: (highlight: Omit<Highlight, 'id' | 'userId' | 'userName' | 'timestamp' | 'color'>) => void;
   currentUser: User | null;
   interactionMode: 'annotate' | 'highlight' | 'none';
+  highlightColor: string;
 }
 
-function SinglePageView({ pageNumber, zoom, annotations, highlights, addAnnotation, addHighlight, currentUser, interactionMode }: SinglePageViewProps) {
+function SinglePageView({ pageNumber, zoom, annotations, highlights, addAnnotation, addHighlight, currentUser, interactionMode, highlightColor }: SinglePageViewProps) {
   const pageWrapperRef = useRef<HTMLDivElement>(null);
   const [isDrawingHighlight, setIsDrawingHighlight] = useState(false);
   const [highlightStart, setHighlightStart] = useState<{x: number, y: number} | null>(null);
   const [highlightEnd, setHighlightEnd] = useState<{x: number, y: number} | null>(null);
+  const [pendingAnnotation, setPendingAnnotation] = useState<{ x: number; y: number } | null>(null);
+  const [annotationContent, setAnnotationContent] = useState('');
   
   const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (interactionMode !== 'annotate' || e.target !== e.currentTarget) return;
+    if (interactionMode !== 'annotate' || e.target !== e.currentTarget || pendingAnnotation) return;
     if (!pageWrapperRef.current) return;
     
     const rect = pageWrapperRef.current.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
     const y = ((e.clientY - rect.top) / rect.height) * 100;
-    
-    const content = prompt("Enter annotation text:");
-    if (content) {
-      addAnnotation({
-        pageNumber,
-        x,
-        y,
-        content,
-      });
-    }
+
+    setPendingAnnotation({ x, y });
+  };
+
+  const handleSaveAnnotation = () => {
+    if (!annotationContent.trim() || !pendingAnnotation) return;
+    addAnnotation({
+      pageNumber,
+      x: pendingAnnotation.x,
+      y: pendingAnnotation.y,
+      content: annotationContent,
+    });
+    setPendingAnnotation(null);
+    setAnnotationContent('');
+  };
+
+  const handleCancelAnnotation = () => {
+    setPendingAnnotation(null);
+    setAnnotationContent('');
   };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -84,7 +100,6 @@ function SinglePageView({ pageNumber, zoom, annotations, highlights, addAnnotati
     
     const { width, height } = pageWrapperRef.current.getBoundingClientRect();
     
-    // Prevent creating tiny highlights from mis-clicks
     if (Math.abs(highlightEnd.x - highlightStart.x) < 5 || Math.abs(highlightEnd.y - highlightStart.y) < 5) {
         setIsDrawingHighlight(false);
         setHighlightStart(null);
@@ -123,6 +138,8 @@ function SinglePageView({ pageNumber, zoom, annotations, highlights, addAnnotati
         default: return '';
     }
   };
+  
+  const solidHighlightColor = highlightColor.replace('hsla', 'hsl').replace(/, ?0\.\d+\)/, ')');
 
   return (
     <div 
@@ -167,10 +184,48 @@ function SinglePageView({ pageNumber, zoom, annotations, highlights, addAnnotati
                         top: Math.min(highlightStart.y, highlightEnd.y),
                         width: Math.abs(highlightEnd.x - highlightStart.x),
                         height: Math.abs(highlightEnd.y - highlightStart.y),
-                        backgroundColor: currentUser ? `${currentUser.color.replace('hsl', 'hsla').replace(')', ', 0.3)')}` : 'rgba(255, 215, 0, 0.3)',
-                        border: `1px dashed ${currentUser?.color}`
+                        backgroundColor: highlightColor,
+                        border: `1px dashed ${solidHighlightColor}`
                     }}
                 />
+            )}
+
+            {pendingAnnotation && (
+                <Popover open={!!pendingAnnotation} onOpenChange={(isOpen) => !isOpen && handleCancelAnnotation()}>
+                    <PopoverTrigger asChild>
+                        <div
+                            className="ember-dot absolute -translate-x-1/2 -translate-y-1/2 w-4 h-4 cursor-pointer pointer-events-auto"
+                            style={{
+                            left: `${pendingAnnotation.x}%`,
+                            top: `${pendingAnnotation.y}%`,
+                            backgroundColor: currentUser?.color || 'hsl(var(--primary))',
+                            }}
+                        />
+                    </PopoverTrigger>
+                    <PopoverContent className="w-64 pointer-events-auto" align="start" side="right">
+                        <div className="grid gap-4">
+                            <div className="space-y-2">
+                            <h4 className="font-medium leading-none">Add Annotation</h4>
+                            <p className="text-sm text-muted-foreground">
+                                Leave a note for your fellow readers.
+                            </p>
+                            </div>
+                            <div className="grid gap-2">
+                            <Textarea
+                                value={annotationContent}
+                                onChange={(e) => setAnnotationContent(e.target.value)}
+                                placeholder="Your thoughts..."
+                                rows={3}
+                                autoFocus
+                            />
+                            <div className="flex justify-end gap-2">
+                                <Button variant="ghost" size="sm" onClick={handleCancelAnnotation}>Cancel</Button>
+                                <Button size="sm" onClick={handleSaveAnnotation}>Save</Button>
+                            </div>
+                            </div>
+                        </div>
+                    </PopoverContent>
+                </Popover>
             )}
 
             <TooltipProvider>
@@ -196,7 +251,7 @@ function SinglePageView({ pageNumber, zoom, annotations, highlights, addAnnotati
 }
 
 
-export function PdfViewer({ pdfData, currentPage, zoom, annotations, highlights, addAnnotation, addHighlight, currentUser, onDocumentLoadSuccess, isDualPage, numPages, interactionMode }: PdfViewerProps) {
+export function PdfViewer({ pdfData, currentPage, zoom, annotations, highlights, addAnnotation, addHighlight, currentUser, onDocumentLoadSuccess, isDualPage, numPages, interactionMode, highlightColor }: PdfViewerProps) {
   
   return (
     <div className="w-full h-full overflow-auto flex justify-center items-start p-4 bg-muted/50">
@@ -217,6 +272,7 @@ export function PdfViewer({ pdfData, currentPage, zoom, annotations, highlights,
                     addHighlight={addHighlight}
                     currentUser={currentUser}
                     interactionMode={interactionMode}
+                    highlightColor={highlightColor}
                 />
             )}
             {isDualPage && currentPage + 1 <= numPages && (
@@ -229,6 +285,7 @@ export function PdfViewer({ pdfData, currentPage, zoom, annotations, highlights,
                     addHighlight={addHighlight}
                     currentUser={currentUser}
                     interactionMode={interactionMode}
+                    highlightColor={highlightColor}
                 />
             )}
         </div>
