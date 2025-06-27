@@ -19,18 +19,28 @@ interface PdfViewerProps {
   addHighlight: (highlight: Omit<Highlight, 'id' | 'userId' | 'userName' | 'timestamp' | 'color'>) => void;
   currentUser: User | null;
   onDocumentLoadSuccess: (doc: PDFDocumentProxy) => void;
+  isDualPage: boolean;
+  numPages: number;
 }
 
-export function PdfViewer({ pdfData, currentPage, zoom, annotations, highlights, addAnnotation, addHighlight, currentUser, onDocumentLoadSuccess }: PdfViewerProps) {
+interface SinglePageViewProps {
+  pageNumber: number;
+  zoom: number;
+  annotations: Annotation[];
+  highlights: Highlight[];
+  addAnnotation: (annotation: Omit<Annotation, 'id' | 'userId' | 'userName' | 'timestamp' | 'color'>) => void;
+  addHighlight: (highlight: Omit<Highlight, 'id' | 'userId' | 'userName' | 'timestamp' | 'color'>) => void;
+  currentUser: User | null;
+}
+
+function SinglePageView({ pageNumber, zoom, annotations, highlights, addAnnotation, addHighlight, currentUser }: SinglePageViewProps) {
   const pageWrapperRef = useRef<HTMLDivElement>(null);
   const [isDrawingHighlight, setIsDrawingHighlight] = useState(false);
   const [highlightStart, setHighlightStart] = useState<{x: number, y: number} | null>(null);
   const [highlightEnd, setHighlightEnd] = useState<{x: number, y: number} | null>(null);
   
   const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Check if the click was on the page background, not on an existing annotation dot
-    if (e.target !== e.currentTarget) return;
-
+    if (e.target !== e.currentTarget || isDrawingHighlight) return;
     if (!pageWrapperRef.current) return;
     
     const rect = pageWrapperRef.current.getBoundingClientRect();
@@ -40,7 +50,7 @@ export function PdfViewer({ pdfData, currentPage, zoom, annotations, highlights,
     const content = prompt("Enter annotation text:");
     if (content) {
       addAnnotation({
-        pageNumber: currentPage,
+        pageNumber,
         x,
         y,
         content,
@@ -69,7 +79,7 @@ export function PdfViewer({ pdfData, currentPage, zoom, annotations, highlights,
     const { width, height } = pageWrapperRef.current.getBoundingClientRect();
     
     const newHighlight = {
-        pageNumber: currentPage,
+        pageNumber,
         rects: [{
             x: (Math.min(highlightStart.x, highlightEnd.x) / width) * 100,
             y: (Math.min(highlightStart.y, highlightEnd.y) / height) * 100,
@@ -86,34 +96,22 @@ export function PdfViewer({ pdfData, currentPage, zoom, annotations, highlights,
   
   return (
     <div 
-        className="w-full h-full overflow-auto flex justify-center items-start p-4 bg-muted/50"
-    >
-      <div 
         className="relative shadow-lg page-turn-animation"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        title={isDrawingHighlight ? "" : "Click to add an annotation. Hold Alt and drag to highlight."}
+        title="Click to add an annotation. Hold Alt and drag to highlight."
       >
         <div ref={pageWrapperRef} onClick={handleContainerClick}>
-            <Document
-                file={pdfData}
-                loading={<div className="flex items-center justify-center p-20"><Loader2 className="h-8 w-8 animate-spin" /></div>}
-                error="Failed to load PDF file."
-                onLoadSuccess={onDocumentLoadSuccess}
-            >
-                <Page
-                    pageNumber={currentPage}
-                    scale={zoom}
-                    renderTextLayer={false}
-                    renderAnnotationLayer={false}
-                />
-            </Document>
+            <Page
+                pageNumber={pageNumber}
+                scale={zoom}
+                renderTextLayer={false}
+                renderAnnotationLayer={false}
+            />
         </div>
 
-        {/* This div is the overlay, absolutely positioned to the pageWrapperRef's parent */}
         <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
-            {/* Highlights Layer */}
             {highlights.map(h => h.rects.map((rect, i) => (
                 <div 
                     key={`${h.id}-${i}`}
@@ -141,7 +139,6 @@ export function PdfViewer({ pdfData, currentPage, zoom, annotations, highlights,
                 />
             )}
 
-            {/* Annotations Layer */}
             <TooltipProvider>
                 {annotations.map(annotation => (
                 <Tooltip key={annotation.id}>
@@ -161,6 +158,45 @@ export function PdfViewer({ pdfData, currentPage, zoom, annotations, highlights,
             </TooltipProvider>
         </div>
       </div>
+  );
+}
+
+
+export function PdfViewer({ pdfData, currentPage, zoom, annotations, highlights, addAnnotation, addHighlight, currentUser, onDocumentLoadSuccess, isDualPage, numPages }: PdfViewerProps) {
+  
+  return (
+    <div 
+        className="w-full h-full overflow-auto flex justify-center items-start p-4 bg-muted/50"
+    >
+      <Document
+          file={pdfData}
+          loading={<div className="flex items-center justify-center p-20"><Loader2 className="h-8 w-8 animate-spin" /></div>}
+          error="Failed to load PDF file."
+          onLoadSuccess={onDocumentLoadSuccess}
+      >
+        <div className="flex justify-center items-start gap-8">
+            <SinglePageView 
+                pageNumber={currentPage}
+                zoom={zoom}
+                annotations={annotations.filter(a => a.pageNumber === currentPage)}
+                highlights={highlights.filter(h => h.pageNumber === currentPage)}
+                addAnnotation={addAnnotation}
+                addHighlight={addHighlight}
+                currentUser={currentUser}
+            />
+            {isDualPage && currentPage < numPages && (
+                <SinglePageView 
+                    pageNumber={currentPage + 1}
+                    zoom={zoom}
+                    annotations={annotations.filter(a => a.pageNumber === currentPage + 1)}
+                    highlights={highlights.filter(h => h.pageNumber === currentPage + 1)}
+                    addAnnotation={addAnnotation}
+                    addHighlight={addHighlight}
+                    currentUser={currentUser}
+                />
+            )}
+        </div>
+      </Document>
     </div>
   );
 }

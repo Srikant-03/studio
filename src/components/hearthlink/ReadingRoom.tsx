@@ -33,6 +33,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [numPages, setNumPages] = useState(0);
   const [zoom, setZoom] = useState(1);
+  const [isDualPage, setIsDualPage] = useState(false);
 
   // For now, collaboration data is local. A real-time db would be next.
   const [users, setUsers] = useState<User[]>([]);
@@ -235,19 +236,27 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
       <main className="flex-1 flex flex-col">
         <header className="flex-shrink-0 border-b p-2 text-center bg-card/80">
           <h1 className="font-headline text-2xl font-bold">{room?.name}</h1>
-          <p className="text-sm text-muted-foreground">Page {currentPage} of {numPages}</p>
+          {numPages > 0 && (
+            <p className="text-sm text-muted-foreground">
+              {isDualPage
+                ? `Pages ${currentPage}-${Math.min(currentPage + 1, numPages)} of ${numPages}`
+                : `Page ${currentPage} of ${numPages}`}
+            </p>
+          )}
         </header>
         <div className="flex-1 relative overflow-hidden">
             <PdfViewer
                 pdfData={pdfData}
                 currentPage={currentPage}
                 zoom={zoom}
-                annotations={annotations.filter(a => a.pageNumber === currentPage)}
-                highlights={highlights.filter(h => h.pageNumber === currentPage)}
+                annotations={annotations}
+                highlights={highlights}
                 addAnnotation={addAnnotation}
                 addHighlight={addHighlight}
                 currentUser={currentUser}
                 onDocumentLoadSuccess={(doc) => setNumPages(doc.numPages)}
+                isDualPage={isDualPage}
+                numPages={numPages}
             />
         </div>
         <Toolbar
@@ -256,6 +265,8 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
           setCurrentPage={setCurrentPage}
           zoom={zoom}
           setZoom={setZoom}
+          isDualPage={isDualPage}
+          setIsDualPage={setIsDualPage}
         />
       </main>
       <ChatPanel messages={messages} addMessage={addMessage} currentUser={currentUser} />

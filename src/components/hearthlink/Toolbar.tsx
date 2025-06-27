@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ArrowLeft, ArrowRight, ZoomIn, ZoomOut, Lamp, Minus, Plus } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ZoomIn, ZoomOut, Lamp, PanelLeft, PanelsLeftRight } from 'lucide-react';
 
 interface ToolbarProps {
   currentPage: number;
@@ -12,15 +12,22 @@ interface ToolbarProps {
   setCurrentPage: (page: number) => void;
   zoom: number;
   setZoom: (zoom: number) => void;
+  isDualPage: boolean;
+  setIsDualPage: (isDual: boolean) => void;
 }
 
-export function Toolbar({ currentPage, numPages, setCurrentPage, zoom, setZoom }: ToolbarProps) {
+export function Toolbar({ currentPage, numPages, setCurrentPage, zoom, setZoom, isDualPage, setIsDualPage }: ToolbarProps) {
   const handlePageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newPage = parseInt(e.target.value, 10);
+    let newPage = parseInt(e.target.value, 10);
     if (newPage >= 1 && newPage <= numPages) {
+      if (isDualPage && newPage % 2 === 0) {
+        newPage -= 1; // In dual page view, always land on an odd page number
+      }
       setCurrentPage(newPage);
     }
   };
+
+  const pageIncrement = isDualPage ? 2 : 1;
 
   return (
     <div className="flex-shrink-0 flex items-center justify-center gap-4 p-2 border-t bg-card/80">
@@ -28,7 +35,7 @@ export function Toolbar({ currentPage, numPages, setCurrentPage, zoom, setZoom }
         <div className="flex items-center gap-2">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={() => setCurrentPage(currentPage - 1)} disabled={currentPage <= 1}>
+              <Button variant="ghost" size="icon" onClick={() => setCurrentPage(Math.max(1, currentPage - pageIncrement))} disabled={currentPage <= 1}>
                 <ArrowLeft className="h-5 w-5" />
               </Button>
             </TooltipTrigger>
@@ -48,7 +55,7 @@ export function Toolbar({ currentPage, numPages, setCurrentPage, zoom, setZoom }
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={() => setCurrentPage(currentPage + 1)} disabled={currentPage >= numPages}>
+              <Button variant="ghost" size="icon" onClick={() => setCurrentPage(Math.min(numPages, currentPage + pageIncrement))} disabled={currentPage >= numPages}>
                 <ArrowRight className="h-5 w-5" />
               </Button>
             </TooltipTrigger>
@@ -77,6 +84,15 @@ export function Toolbar({ currentPage, numPages, setCurrentPage, zoom, setZoom }
                 <TooltipContent>Zoom In</TooltipContent>
             </Tooltip>
         </div>
+
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" onClick={() => setIsDualPage(!isDualPage)}>
+                    {isDualPage ? <PanelLeft className="h-5 w-5" /> : <PanelsLeftRight className="h-5 w-5" />}
+                </Button>
+            </TooltipTrigger>
+            <TooltipContent>{isDualPage ? 'Single Page View' : 'Dual Page View'}</TooltipContent>
+        </Tooltip>
 
         <Tooltip>
             <TooltipTrigger asChild>

@@ -83,16 +83,16 @@ body {
 }
 
 .page-turn-animation {
-  animation: page-turn 0.5s ease-in-out;
+  animation: page-turn 0.5s ease-out;
 }
 
 @keyframes page-turn {
   from {
-    opacity: 0.5;
-    transform: scale(0.98);
+    opacity: 0;
+    transform: translateX(30px);
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: translateX(0);
   }
 }
