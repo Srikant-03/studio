@@ -27,10 +27,13 @@ export function PdfViewer({ pdfDoc, currentPage, zoom, annotations, highlights, 
   const { toast } = useToast();
 
   useEffect(() => {
+    let isMounted = true;
+    let currentTask: RenderTask | null = null;
+
     const renderPage = async () => {
       if (!pdfDoc || !canvasRef.current || !containerRef.current) return;
-      
-      // Cancel previous render task if it exists
+
+      // Cancel any previous render task. This is key for handling rapid changes.
       if (renderTaskRef.current) {
         renderTaskRef.current.cancel();
       }
@@ -40,6 +43,7 @@ export function PdfViewer({ pdfDoc, currentPage, zoom, annotations, highlights, 
         const viewport = page.getViewport({ scale: zoom });
         const canvas = canvasRef.current;
         const context = canvas.getContext('2d');
+        if (!context) return;
 
         canvas.height = viewport.height;
         canvas.width = viewport.width;
@@ -47,36 +51,43 @@ export function PdfViewer({ pdfDoc, currentPage, zoom, annotations, highlights, 
         containerRef.current.style.height = `${viewport.height}px`;
         containerRef.current.style.width = `${viewport.width}px`;
         
-        if(context){
-          const renderContext = {
-            canvasContext: context,
-            viewport: viewport,
-          };
-          
-          const task = page.render(renderContext);
-          renderTaskRef.current = task;
-          await task.promise;
-        }
+        const renderContext = {
+          canvasContext: context,
+          viewport: viewport,
+        };
+        
+        currentTask = page.render(renderContext);
+        renderTaskRef.current = currentTask; // Assign to the shared ref
+        
+        await currentTask.promise;
+
       } catch (error: any) {
-        // pdf.js throws a "RenderingCancelledException" which we can ignore.
-        if (error.name !== 'RenderingCancelledException') {
+        // pdf.js throws a "RenderingCancelledException", which is expected when we cancel a render.
+        // We only want to log or show a toast for other types of errors.
+        if (error.name !== 'RenderingCancelledException' && isMounted) {
             console.error('Error rendering page:', error);
             toast({ variant: "destructive", title: "Render Error", description: `Could not render page ${currentPage}.` });
         }
       } finally {
-        renderTaskRef.current = null;
+        // Only clear the shared ref if it's still pointing to the task from *this* effect instance.
+        // This prevents a race condition where a newer render's task is incorrectly cleared.
+        if (renderTaskRef.current === currentTask) {
+          renderTaskRef.current = null;
+        }
       }
     };
     
     renderPage();
 
     return () => {
-        if (renderTaskRef.current) {
-            renderTaskRef.current.cancel();
-            renderTaskRef.current = null;
-        }
+      isMounted = false;
+      // When the component unmounts or dependencies change, cancel the task started by this effect.
+      if (currentTask) {
+        currentTask.cancel();
+      }
     };
   }, [pdfDoc, currentPage, zoom, toast]);
+
 
   const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
