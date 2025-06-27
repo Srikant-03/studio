@@ -15,6 +15,8 @@ import type { Annotation, Highlight, ChatMessage, User, Room } from '@/types/hea
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { getRoom } from '@/lib/rooms';
+import { db } from '@/lib/firebase';
+import { collection, addDoc, query, onSnapshot, orderBy } from 'firebase/firestore';
 
 // Setup PDF.js worker. This needs to be done once per application.
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -35,16 +37,29 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
   const [zoom, setZoom] = useState(1);
   const [isDualPage, setIsDualPage] = useState(false);
 
-  // For now, collaboration data is local. A real-time db would be next.
+  // Collaboration data is now fetched from Firestore in real-time
   const [users, setUsers] = useState<User[]>([]);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
 
+  // Page persistence logic
+  useEffect(() => {
+    if (!roomId) return;
+    const lastPage = localStorage.getItem(`hearthlink-lastpage-${roomId}`);
+    if (lastPage) {
+      setCurrentPage(parseInt(lastPage, 10));
+    }
+  }, [roomId]);
+
+  useEffect(() => {
+    if (!roomId) return;
+    localStorage.setItem(`hearthlink-lastpage-${roomId}`, String(currentPage));
+  }, [currentPage, roomId]);
+  
   useEffect(() => {
     if (authLoading) return;
     if (!currentUser) {
-        // Redirect or handle non-authed user
         return;
     }
 
@@ -75,45 +90,96 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
 
   }, [roomId, currentUser, authLoading, toast]);
 
+  // Firestore listeners for real-time collaboration
+  useEffect(() => {
+    if (!roomId) return;
 
-  const addAnnotation = (annotation: Omit<Annotation, 'id' | 'userId' | 'userName' | 'timestamp' | 'color'>) => {
-    if (!currentUser) return;
-    const newAnnotation: Annotation = {
-      ...annotation,
-      id: `anno-${Date.now()}`,
-      userId: currentUser.id,
-      userName: currentUser.name,
-      timestamp: Date.now(),
-      color: currentUser.color,
+    // Listener for Annotations
+    const annotationsRef = collection(db, 'rooms', roomId, 'annotations');
+    const qAnnotations = query(annotationsRef, orderBy('timestamp', 'asc'));
+    const unsubscribeAnnotations = onSnapshot(qAnnotations, (snapshot) => {
+        const fetchedAnnotations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Annotation));
+        setAnnotations(fetchedAnnotations);
+    }, (err) => {
+        console.error("Error fetching annotations:", err);
+        toast({ variant: "destructive", title: "Connection Error", description: "Could not sync annotations." });
+    });
+
+    // Listener for Highlights
+    const highlightsRef = collection(db, 'rooms', roomId, 'highlights');
+    const qHighlights = query(highlightsRef, orderBy('timestamp', 'asc'));
+    const unsubscribeHighlights = onSnapshot(qHighlights, (snapshot) => {
+        const fetchedHighlights = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Highlight));
+        setHighlights(fetchedHighlights);
+    }, (err) => {
+        console.error("Error fetching highlights:", err);
+        toast({ variant: "destructive", title: "Connection Error", description: "Could not sync highlights." });
+    });
+
+     // Listener for Chat Messages
+    const messagesRef = collection(db, 'rooms', roomId, 'messages');
+    const qMessages = query(messagesRef, orderBy('timestamp', 'asc'));
+    const unsubscribeMessages = onSnapshot(qMessages, (snapshot) => {
+      const fetchedMessages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatMessage));
+      setMessages(fetchedMessages);
+    });
+
+
+    return () => {
+        unsubscribeAnnotations();
+        unsubscribeHighlights();
+        unsubscribeMessages();
     };
-    setAnnotations(prev => [...prev, newAnnotation]);
-    addMessage({type: 'system', message: `${currentUser.name} added an annotation on page ${annotation.pageNumber}.`})
-  };
+  }, [roomId, toast]);
 
-  const addHighlight = (highlight: Omit<Highlight, 'id' | 'userId' | 'userName' | 'timestamp' | 'color'>) => {
-    if (!currentUser) return;
-    const newHighlight: Highlight = {
-        ...highlight,
-        id: `high-${Date.now()}`,
+  const addAnnotation = async (annotation: Omit<Annotation, 'id' | 'userId' | 'userName' | 'timestamp' | 'color'>) => {
+    if (!currentUser || !roomId) return;
+    try {
+      const annotationsRef = collection(db, 'rooms', roomId, 'annotations');
+      await addDoc(annotationsRef, {
+        ...annotation,
         userId: currentUser.id,
         userName: currentUser.name,
         timestamp: Date.now(),
-        color: `${currentUser.color.replace('hsl', 'hsla').replace(')', ', 0.3)')}`,
-    };
-    setHighlights(prev => [...prev, newHighlight]);
+        color: currentUser.color,
+      });
+      addMessage({type: 'system', message: `${currentUser.name} added an annotation on page ${annotation.pageNumber}.`})
+    } catch (error) {
+        console.error("Error adding annotation:", error);
+        toast({ variant: "destructive", title: "Sync Error", description: "Could not save annotation." });
+    }
+  };
+
+  const addHighlight = async (highlight: Omit<Highlight, 'id' | 'userId' | 'userName' | 'timestamp' | 'color'>) => {
+    if (!currentUser || !roomId) return;
+    try {
+        const highlightsRef = collection(db, 'rooms', roomId, 'highlights');
+        await addDoc(highlightsRef, {
+          ...highlight,
+          id: `high-${Date.now()}`,
+          userId: currentUser.id,
+          userName: currentUser.name,
+          timestamp: Date.now(),
+          color: `${currentUser.color.replace('hsl', 'hsla').replace(')', ', 0.3)')}`,
+        });
+    } catch (error) {
+        console.error("Error adding highlight:", error);
+        toast({ variant: "destructive", title: "Sync Error", description: "Could not save highlight." });
+    }
   }
 
-  const addMessage = (message: { type: 'text' | 'system', message: string }) => {
-    if (!currentUser) return;
-    const newMessage: ChatMessage = {
-      id: `msg-${Date.now()}`,
+  const addMessage = async (message: { type: 'text' | 'system', message: string }) => {
+    if (!currentUser || !roomId) return;
+
+    const messagesRef = collection(db, 'rooms', roomId, 'messages');
+    
+    await addDoc(messagesRef, {
       type: message.type,
       userId: message.type === 'system' ? 'system' : currentUser.id,
       userName: message.type === 'system' ? 'System' : currentUser.name,
       message: message.message,
       timestamp: Date.now(),
-    };
-    setMessages(prev => [...prev, newMessage]);
+    });
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -132,12 +198,10 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
 
     try {
       const arrayBuffer = await file.arrayBuffer();
+      const pdfDataCopy = arrayBuffer.slice(0); // Create a copy for the viewer
+      setPdfData(pdfDataCopy);
       
-      // Pass a copy to react-pdf for rendering to avoid detached buffer error.
-      setPdfData(arrayBuffer.slice(0));
-      
-      // Use the original (or another copy) for text extraction.
-      const doc = await pdfjs.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+      const doc = await pdfjs.getDocument({ data: arrayBuffer }).promise;
       setPdfDoc(doc);
     } catch (err) {
       console.error("Error loading local PDF:", err);

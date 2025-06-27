@@ -1,13 +1,16 @@
 "use client";
 
 import { useRef, useState } from 'react';
-import { Document, Page } from 'react-pdf';
+import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 import type { Annotation, Highlight, User } from '@/types/hearthlink';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Loader2 } from 'lucide-react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
+
+// This is required for react-pdf to work
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface PdfViewerProps {
   pdfData: ArrayBuffer;
@@ -40,8 +43,16 @@ function SinglePageView({ pageNumber, zoom, annotations, highlights, addAnnotati
   const [highlightEnd, setHighlightEnd] = useState<{x: number, y: number} | null>(null);
   
   const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Only trigger on direct clicks on the container, not on annotations or other elements.
+    // Also, don't trigger if the user just finished drawing a highlight.
     if (e.target !== e.currentTarget || isDrawingHighlight) return;
     if (!pageWrapperRef.current) return;
+    
+    // Check if the click was part of a drag (for text selection)
+    if (Math.abs(e.clientX - (e.currentTarget.dataset.mouseDownX ? parseFloat(e.currentTarget.dataset.mouseDownX) : e.clientX)) > 5 ||
+        Math.abs(e.clientY - (e.currentTarget.dataset.mouseDownY ? parseFloat(e.currentTarget.dataset.mouseDownY) : e.clientY)) > 5) {
+        return;
+    }
     
     const rect = pageWrapperRef.current.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
@@ -59,6 +70,10 @@ function SinglePageView({ pageNumber, zoom, annotations, highlights, addAnnotati
   };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+     // Store mouse down position to differentiate click from drag
+    e.currentTarget.dataset.mouseDownX = `${e.clientX}`;
+    e.currentTarget.dataset.mouseDownY = `${e.clientY}`;
+
     if (!e.altKey || !pageWrapperRef.current) return;
     e.preventDefault();
     setIsDrawingHighlight(true);
@@ -78,6 +93,14 @@ function SinglePageView({ pageNumber, zoom, annotations, highlights, addAnnotati
     
     const { width, height } = pageWrapperRef.current.getBoundingClientRect();
     
+    // Prevent creating tiny highlights from mis-clicks
+    if (Math.abs(highlightEnd.x - highlightStart.x) < 5 || Math.abs(highlightEnd.y - highlightStart.y) < 5) {
+        setIsDrawingHighlight(false);
+        setHighlightStart(null);
+        setHighlightEnd(null);
+        return;
+    }
+
     const newHighlight = {
         pageNumber,
         rects: [{
@@ -89,7 +112,11 @@ function SinglePageView({ pageNumber, zoom, annotations, highlights, addAnnotati
     };
     addHighlight(newHighlight);
 
-    setIsDrawingHighlight(false);
+    // Set a timeout to reset isDrawingHighlight to false, to prevent click event from firing.
+    setTimeout(() => {
+        setIsDrawingHighlight(false);
+    }, 100);
+
     setHighlightStart(null);
     setHighlightEnd(null);
   };
@@ -97,15 +124,18 @@ function SinglePageView({ pageNumber, zoom, annotations, highlights, addAnnotati
   return (
     <div 
         className="relative shadow-lg page-turn-animation"
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        title="Click to add an annotation. Hold Alt and drag to highlight."
+        style={{ transform: `scale(${zoom})` }}
       >
-        <div ref={pageWrapperRef} onClick={handleContainerClick}>
+        <div 
+            ref={pageWrapperRef} 
+            onClick={handleContainerClick}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            title="Click to add an annotation. Hold Alt and drag to highlight."
+        >
             <Page
                 pageNumber={pageNumber}
-                scale={zoom}
                 renderTextLayer={false}
                 renderAnnotationLayer={false}
             />
@@ -148,9 +178,9 @@ function SinglePageView({ pageNumber, zoom, annotations, highlights, addAnnotati
                         style={{ left: `${annotation.x}%`, top: `${annotation.y}%`, backgroundColor: annotation.color }}
                     />
                     </TooltipTrigger>
-                    <TooltipContent className="bg-card text-card-foreground shadow-lg">
+                    <TooltipContent className="bg-card text-card-foreground shadow-lg max-w-xs">
                     <p className="font-bold text-sm" style={{color: annotation.color}}>{annotation.userName}</p>
-                    <p className="text-base">{annotation.content}</p>
+                    <p className="text-base break-words">{annotation.content}</p>
                     <p className="text-xs text-muted-foreground mt-1">{new Date(annotation.timestamp).toLocaleString()}</p>
                     </TooltipContent>
                 </Tooltip>
@@ -165,9 +195,7 @@ function SinglePageView({ pageNumber, zoom, annotations, highlights, addAnnotati
 export function PdfViewer({ pdfData, currentPage, zoom, annotations, highlights, addAnnotation, addHighlight, currentUser, onDocumentLoadSuccess, isDualPage, numPages }: PdfViewerProps) {
   
   return (
-    <div 
-        className="w-full h-full overflow-auto flex justify-center items-start p-4 bg-muted/50"
-    >
+    <div className="w-full h-full overflow-auto flex justify-center items-start p-4 bg-muted/50">
       <Document
           file={pdfData}
           loading={<div className="flex items-center justify-center p-20"><Loader2 className="h-8 w-8 animate-spin" /></div>}
@@ -175,16 +203,18 @@ export function PdfViewer({ pdfData, currentPage, zoom, annotations, highlights,
           onLoadSuccess={onDocumentLoadSuccess}
       >
         <div className="flex justify-center items-start gap-8">
-            <SinglePageView 
-                pageNumber={currentPage}
-                zoom={zoom}
-                annotations={annotations.filter(a => a.pageNumber === currentPage)}
-                highlights={highlights.filter(h => h.pageNumber === currentPage)}
-                addAnnotation={addAnnotation}
-                addHighlight={addHighlight}
-                currentUser={currentUser}
-            />
-            {isDualPage && currentPage < numPages && (
+            {currentPage <= numPages && (
+                <SinglePageView 
+                    pageNumber={currentPage}
+                    zoom={zoom}
+                    annotations={annotations.filter(a => a.pageNumber === currentPage)}
+                    highlights={highlights.filter(h => h.pageNumber === currentPage)}
+                    addAnnotation={addAnnotation}
+                    addHighlight={addHighlight}
+                    currentUser={currentUser}
+                />
+            )}
+            {isDualPage && currentPage + 1 <= numPages && (
                 <SinglePageView 
                     pageNumber={currentPage + 1}
                     zoom={zoom}
