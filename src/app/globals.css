@@ -83,16 +83,19 @@ body {
 }
 
 .page-turn-animation {
-  animation: page-turn 0.5s ease-out;
+  animation: page-turn 0.6s ease-in-out;
+  transform-style: preserve-3d;
 }
 
 @keyframes page-turn {
   from {
+    transform: rotateY(90deg);
+    transform-origin: left;
     opacity: 0;
-    transform: translateX(30px) scale(0.98);
   }
   to {
+    transform: rotateY(0deg);
+    transform-origin: left;
     opacity: 1;
-    transform: translateX(0) scale(1);
   }
 }

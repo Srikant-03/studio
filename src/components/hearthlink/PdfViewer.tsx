@@ -262,9 +262,10 @@ export function PdfViewer({ pdfData, currentPage, zoom, annotations, highlights,
           error="Failed to load PDF file."
           onLoadSuccess={onDocumentLoadSuccess}
       >
-        <div className="flex justify-center items-start gap-8">
+        <div className="flex justify-center items-start gap-8" style={{ perspective: '1200px' }}>
             {currentPage <= numPages && (
                 <SinglePageView 
+                    key={currentPage}
                     pageNumber={currentPage}
                     zoom={zoom}
                     annotations={annotations.filter(a => a.pageNumber === currentPage)}
@@ -278,6 +279,7 @@ export function PdfViewer({ pdfData, currentPage, zoom, annotations, highlights,
             )}
             {isDualPage && currentPage + 1 <= numPages && (
                 <SinglePageView 
+                    key={currentPage + 1}
                     pageNumber={currentPage + 1}
                     zoom={zoom}
                     annotations={annotations.filter(a => a.pageNumber === currentPage + 1)}
