@@ -61,8 +61,14 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
       })
       .catch(err => {
         console.error("Error loading room or PDF:", err);
-        setError(err.message || "Failed to load reading room.");
-        toast({ variant: "destructive", title: "Error", description: err.message });
+        let errorMessage = "Failed to load reading room.";
+        if (err.message.includes('offline')) {
+            errorMessage = "Could not connect to the database. Please ensure Firestore is enabled and configured correctly in your Firebase project."
+        } else if (err.message.includes('Room not found')) {
+            errorMessage = err.message;
+        }
+        setError(errorMessage);
+        toast({ variant: "destructive", title: "Error", description: errorMessage });
       })
       .finally(() => {
         setIsLoading(false);

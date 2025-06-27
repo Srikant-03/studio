@@ -13,6 +13,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { createRoom, joinRoom, getUserRooms } from "@/lib/rooms";
 import type { Room } from "@/types/hearthlink";
 import { ScrollArea } from "../ui/scroll-area";
+import { toast } from "@/hooks/use-toast";
 
 export function WelcomePage() {
   const router = useRouter();
@@ -37,9 +38,18 @@ export function WelcomePage() {
       setIsLoadingRooms(true);
       getUserRooms(user.id).then(rooms => {
         setUserRooms(rooms);
-        setIsLoadingRooms(false);
       }).catch(err => {
         console.error("Failed to get user rooms", err);
+        let errorMessage = "Could not fetch your rooms. Please try again.";
+        if (err.message.includes('offline')) {
+            errorMessage = "Could not connect to the database. Please check your Firebase project settings."
+        }
+        toast({
+            variant: "destructive",
+            title: "Database Error",
+            description: errorMessage,
+        })
+      }).finally(() => {
         setIsLoadingRooms(false);
       });
     }
