@@ -71,10 +71,17 @@ export async function getUserRooms(userId: string): Promise<Room[]> {
     const roomIds: string[] = userSnap.data().rooms;
     if (roomIds.length === 0) return [];
     
-    const roomsQuery = query(collection(db, 'rooms'), where('__name__', 'in', roomIds));
-    const roomsSnapshot = await getDocs(roomsQuery);
+    // Fetch each room document individually to avoid potential 'in' query issues.
+    const roomPromises = roomIds
+        .filter(id => typeof id === 'string' && id.trim() !== '') // Ensure IDs are valid strings
+        .map(id => getDoc(doc(db, 'rooms', id)));
     
-    const rooms = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
+    const roomSnapshots = await Promise.all(roomPromises);
+
+    const rooms = roomSnapshots
+        .filter(snap => snap.exists())
+        .map(snap => ({ id: snap.id, ...snap.data() } as Room));
+        
     return rooms;
 }
 
