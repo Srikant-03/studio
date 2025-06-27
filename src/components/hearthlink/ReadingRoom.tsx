@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import * as pdfjsLib from 'pdfjs-dist';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { pdfjs } from 'react-pdf';
 import { Button } from '@/components/ui/button';
@@ -135,7 +134,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
       setPdfData(arrayBuffer); // Set raw data for react-pdf
       
       // Still need pdfDoc for text extraction in SmartAnnotations
-      const doc = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+      const doc = await pdfjs.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
       setPdfDoc(doc);
       setNumPages(doc.numPages);
     } catch (err) {
