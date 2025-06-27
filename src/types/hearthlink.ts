@@ -51,3 +51,11 @@ export interface Room {
   members: string[]; // array of user IDs
   createdAt: any; // Firestore timestamp
 }
+
+export interface Bookmark {
+  id: string;
+  userId: string;
+  userName: string;
+  pageNumber: number;
+  timestamp: number;
+}

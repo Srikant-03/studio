@@ -6,17 +6,18 @@ import { pdfjs } from 'react-pdf';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { FileUp, Loader2, Copy, BookOpen } from 'lucide-react';
+import { FileUp, Loader2, Copy, BookOpen, BookMarked } from 'lucide-react';
 import { PdfViewer } from './PdfViewer';
 import { Toolbar } from './Toolbar';
 import { ChatPanel } from './ChatPanel';
 import { SmartAnnotations } from './SmartAnnotations';
-import type { Annotation, Highlight, ChatMessage, User, Room } from '@/types/hearthlink';
+import type { Annotation, Highlight, ChatMessage, User, Room, Bookmark } from '@/types/hearthlink';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { getRoom } from '@/lib/rooms';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, query, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, addDoc, query, onSnapshot, orderBy, deleteDoc, where, getDocs } from 'firebase/firestore';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 // Setup PDF.js worker. This needs to be done once per application.
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -36,12 +37,16 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
   const [numPages, setNumPages] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [isDualPage, setIsDualPage] = useState(false);
+  const [interactionMode, setInteractionMode] = useState<'annotate' | 'highlight' | 'none'>('none');
+
 
   // Collaboration data is now fetched from Firestore in real-time
   const [users, setUsers] = useState<User[]>([]);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+
 
   // Page persistence logic
   useEffect(() => {
@@ -58,8 +63,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
   }, [currentPage, roomId]);
   
   useEffect(() => {
-    if (authLoading) return;
-    if (!currentUser) {
+    if (authLoading || !currentUser) {
         return;
     }
 
@@ -124,11 +128,23 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
       setMessages(fetchedMessages);
     });
 
+    // Listener for Bookmarks
+    const bookmarksRef = collection(db, 'rooms', roomId, 'bookmarks');
+    const qBookmarks = query(bookmarksRef, orderBy('pageNumber', 'asc'));
+    const unsubscribeBookmarks = onSnapshot(qBookmarks, (snapshot) => {
+        const fetchedBookmarks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Bookmark));
+        setBookmarks(fetchedBookmarks);
+    }, (err) => {
+        console.error("Error fetching bookmarks:", err);
+        toast({ variant: "destructive", title: "Connection Error", description: "Could not sync bookmarks." });
+    });
+
 
     return () => {
         unsubscribeAnnotations();
         unsubscribeHighlights();
         unsubscribeMessages();
+        unsubscribeBookmarks();
     };
   }, [roomId, currentUser, toast]);
 
@@ -156,7 +172,6 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
         const highlightsRef = collection(db, 'rooms', roomId, 'highlights');
         await addDoc(highlightsRef, {
           ...highlight,
-          id: `high-${Date.now()}`,
           userId: currentUser.id,
           userName: currentUser.name,
           timestamp: Date.now(),
@@ -180,6 +195,38 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
       message: message.message,
       timestamp: Date.now(),
     });
+  };
+
+  const toggleBookmark = async () => {
+    if (!currentUser || !roomId) return;
+
+    const existingBookmark = bookmarks.find(b => b.pageNumber === currentPage);
+
+    try {
+        if (existingBookmark) {
+            // Remove bookmark
+            const bookmarkRef = collection(db, 'rooms', roomId, 'bookmarks');
+            const q = query(bookmarkRef, where("pageNumber", "==", currentPage), where("userId", "==", currentUser.id));
+            const querySnapshot = await getDocs(q);
+            querySnapshot.forEach(async (doc) => {
+                await deleteDoc(doc.ref);
+            });
+            toast({ title: "Bookmark Removed", description: `Page ${currentPage} removed from bookmarks.` });
+        } else {
+            // Add bookmark
+            const bookmarksRef = collection(db, 'rooms', roomId, 'bookmarks');
+            await addDoc(bookmarksRef, {
+                userId: currentUser.id,
+                userName: currentUser.name,
+                pageNumber: currentPage,
+                timestamp: Date.now(),
+            });
+            toast({ title: "Bookmarked!", description: `Page ${currentPage} has been added to bookmarks.` });
+        }
+    } catch (error) {
+        console.error("Error toggling bookmark:", error);
+        toast({ variant: "destructive", title: "Sync Error", description: "Could not update bookmark." });
+    }
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -270,12 +317,46 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
     );
   }
 
+  const isPageBookmarked = bookmarks.some(b => b.pageNumber === currentPage);
+
   return (
     <div className="flex h-screen w-full bg-background font-body text-foreground overflow-hidden">
       <aside className="w-64 flex-shrink-0 bg-card/80 p-4 border-r overflow-y-auto hidden md:flex flex-col">
         <h2 className="font-headline text-xl font-bold border-b pb-2 mb-4">Smart Tools</h2>
         {pdfDoc && <SmartAnnotations pdfDoc={pdfDoc} />}
-        <div className="mt-auto space-y-4">
+
+        <div className="mt-4">
+            <h3 className="font-headline text-lg font-bold border-b pb-2 mb-2 flex items-center gap-2">
+                <BookMarked className="w-5 h-5"/>
+                Bookmarks
+            </h3>
+            <ScrollArea className="h-32">
+              <ul className="space-y-1 pr-2">
+                {bookmarks.length > 0 ? (
+                  bookmarks
+                    .sort((a, b) => a.pageNumber - b.pageNumber)
+                    .map(bookmark => (
+                      <li key={bookmark.id}>
+                        <Button
+                          variant="ghost"
+                          className="w-full justify-start text-left h-auto py-1"
+                          onClick={() => setCurrentPage(bookmark.pageNumber)}
+                        >
+                          Page {bookmark.pageNumber}
+                          <span className="text-muted-foreground ml-auto text-xs">
+                            {bookmark.userName.split(' ')[0]}
+                          </span>
+                        </Button>
+                      </li>
+                    ))
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center p-4">No bookmarks yet.</p>
+                )}
+              </ul>
+            </ScrollArea>
+        </div>
+
+        <div className="mt-auto space-y-4 pt-4">
             <div className="space-y-2">
                 <h3 className="font-headline text-lg font-bold border-b pb-2">Invite Friends</h3>
                 <p className="text-sm text-muted-foreground">Share this code to invite others:</p>
@@ -321,6 +402,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
                 onDocumentLoadSuccess={(doc) => setNumPages(doc.numPages)}
                 isDualPage={isDualPage}
                 numPages={numPages}
+                interactionMode={interactionMode}
             />
         </div>
         <Toolbar
@@ -331,6 +413,10 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
           setZoom={setZoom}
           isDualPage={isDualPage}
           setIsDualPage={setIsDualPage}
+          interactionMode={interactionMode}
+          setInteractionMode={setInteractionMode}
+          toggleBookmark={toggleBookmark}
+          isPageBookmarked={isPageBookmarked}
         />
       </main>
       <ChatPanel messages={messages} addMessage={addMessage} currentUser={currentUser} />
