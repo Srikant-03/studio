@@ -13,7 +13,7 @@ import { Toolbar } from './Toolbar';
 import { ChatPanel } from './ChatPanel';
 import { SmartAnnotations } from './SmartAnnotations';
 import type { Annotation, Highlight, ChatMessage, User } from '@/types/hearthlink';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 
 // Setup PDF.js worker
 if (typeof window !== 'undefined') {
