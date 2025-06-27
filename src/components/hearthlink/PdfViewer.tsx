@@ -235,6 +235,7 @@ function SinglePageView({ pageNumber, zoom, annotations, highlights, addAnnotati
                     <div
                         className="ember-dot absolute -translate-x-1/2 -translate-y-1/2 w-4 h-4 cursor-pointer pointer-events-auto"
                         style={{ left: `${annotation.x}%`, top: `${annotation.y}%`, backgroundColor: annotation.color }}
+                        onContextMenu={(e) => e.preventDefault()}
                     />
                     </TooltipTrigger>
                     <TooltipContent className="bg-card text-card-foreground shadow-lg max-w-xs">
