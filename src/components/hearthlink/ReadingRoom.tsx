@@ -41,6 +41,11 @@ const MOCK_MESSAGES: ChatMessage[] = [
     { id: 'msg-3', type: 'system', userId: 'system', userName: 'System', message: 'Sam Smith has joined the room.', timestamp: Date.now() - 170000 },
 ];
 
+async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
+    const res = await fetch(dataUrl);
+    return await res.blob();
+}
+
 export function ReadingRoom({ roomId }: { roomId: string }) {
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -58,33 +63,6 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
   const [highlights, setHighlights] = useState<Highlight[]>(MOCK_HIGHLIGHTS);
   const [messages, setMessages] = useState<ChatMessage[]>(MOCK_MESSAGES);
   const { toast } = useToast();
-
-  useEffect(() => {
-    // Simulate fetching room data and setting up user
-    const storedPdfUrl = sessionStorage.getItem(`pdf_${roomId}`);
-    const storedPdfName = sessionStorage.getItem(`pdf_name_${roomId}`);
-    const storedRoomName = sessionStorage.getItem(`room_name_${roomId}`);
-    
-    setExpectedPdfName(storedPdfName || `a specific PDF for room ${roomId}`);
-    setRoomName(storedRoomName || `Room ${roomId}`);
-    
-    if (storedPdfUrl && storedPdfName) {
-      fetch(storedPdfUrl)
-        .then(res => res.blob())
-        .then(blob => {
-          const file = new File([blob], storedPdfName, { type: 'application/pdf' });
-          handlePdfLoad(file);
-        });
-    } else {
-      setIsLoading(false);
-    }
-
-    const user: User = { id: 'user-1', name: 'You', color: 'hsl(var(--primary))' };
-    setCurrentUser(user);
-    setUsers(prev => [user, ...prev]);
-
-  }, [roomId]);
-
 
   const handlePdfLoad = useCallback(async (file: File) => {
     if (expectedPdfName && file.name !== expectedPdfName) {
@@ -117,6 +95,32 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
     };
     fileReader.readAsArrayBuffer(file);
   }, [expectedPdfName, toast]);
+
+  useEffect(() => {
+    // Simulate fetching room data and setting up user
+    const storedPdfUrl = sessionStorage.getItem(`pdf_${roomId}`);
+    const storedPdfName = sessionStorage.getItem(`pdf_name_${roomId}`);
+    const storedRoomName = sessionStorage.getItem(`room_name_${roomId}`);
+    
+    setExpectedPdfName(storedPdfName || `a specific PDF for room ${roomId}`);
+    setRoomName(storedRoomName || `Room ${roomId}`);
+    
+    if (storedPdfUrl && storedPdfName) {
+      dataUrlToBlob(storedPdfUrl)
+        .then(blob => {
+          const file = new File([blob], storedPdfName, { type: 'application/pdf' });
+          handlePdfLoad(file);
+        });
+    } else {
+      setIsLoading(false);
+    }
+
+    const user: User = { id: 'user-1', name: 'You', color: 'hsl(var(--primary))' };
+    setCurrentUser(user);
+    setUsers(prev => [user, ...prev]);
+
+  }, [roomId, handlePdfLoad]);
+
 
   const addAnnotation = (annotation: Omit<Annotation, 'id' | 'userId' | 'userName' | 'timestamp' | 'color'>) => {
     if (!currentUser) return;

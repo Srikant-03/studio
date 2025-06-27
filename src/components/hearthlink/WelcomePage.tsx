@@ -20,11 +20,16 @@ export function WelcomePage() {
   const handleCreateRoom = (e: React.FormEvent) => {
     e.preventDefault();
     if (roomName && pdfFile) {
-      const roomId = Math.random().toString(36).substring(2, 9);
-      sessionStorage.setItem(`pdf_${roomId}`, URL.createObjectURL(pdfFile));
-      sessionStorage.setItem(`pdf_name_${roomId}`, pdfFile.name);
-      sessionStorage.setItem(`room_name_${roomId}`, roomName);
-      router.push(`/room/${roomId}`);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const pdfDataUrl = event.target?.result as string;
+        const roomId = Math.random().toString(36).substring(2, 9);
+        sessionStorage.setItem(`pdf_${roomId}`, pdfDataUrl);
+        sessionStorage.setItem(`pdf_name_${roomId}`, pdfFile.name);
+        sessionStorage.setItem(`room_name_${roomId}`, roomName);
+        router.push(`/room/${roomId}`);
+      };
+      reader.readAsDataURL(pdfFile);
     } else {
       alert("Please provide a room name and select a PDF file.");
     }
