@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { FileUp, Loader2, Copy, BookOpen } from 'lucide-react';
 import { PdfViewer } from './PdfViewer';
@@ -17,10 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { getRoom } from '@/lib/rooms';
 
-// Setup PDF.js worker
-if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
-}
+// PDF.js worker setup is now handled within PdfViewer.tsx
 
 export function ReadingRoom({ roomId }: { roomId: string }) {
   const { user: currentUser, loading: authLoading } = useAuth();
@@ -28,6 +24,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
 
   const [room, setRoom] = useState<Room | null>(null);
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
+  const [pdfData, setPdfData] = useState<ArrayBuffer | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -133,7 +130,10 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
 
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      setPdfData(arrayBuffer); // Set raw data for react-pdf
+      
+      // Still need pdfDoc for text extraction in SmartAnnotations
+      const doc = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
       setPdfDoc(doc);
       setNumPages(doc.numPages);
     } catch (err) {
@@ -176,7 +176,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
     );
   }
 
-  if (!pdfDoc) {
+  if (!pdfData) {
      return (
       <div className="flex h-screen w-full items-center justify-center bg-background text-foreground">
         <Card className="w-full max-w-lg shadow-xl">
@@ -207,7 +207,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
     <div className="flex h-screen w-full bg-background font-body text-foreground overflow-hidden">
       <aside className="w-64 flex-shrink-0 bg-card/80 p-4 border-r overflow-y-auto hidden md:flex flex-col">
         <h2 className="font-headline text-xl font-bold border-b pb-2 mb-4">Smart Tools</h2>
-        <SmartAnnotations pdfDoc={pdfDoc} />
+        {pdfDoc && <SmartAnnotations pdfDoc={pdfDoc} />}
         <div className="mt-auto space-y-4">
             <div className="space-y-2">
                 <h3 className="font-headline text-lg font-bold border-b pb-2">Invite Friends</h3>
@@ -237,7 +237,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
         </header>
         <div className="flex-1 relative overflow-hidden">
             <PdfViewer
-                pdfDoc={pdfDoc}
+                pdfData={pdfData}
                 currentPage={currentPage}
                 zoom={zoom}
                 annotations={annotations.filter(a => a.pageNumber === currentPage)}
