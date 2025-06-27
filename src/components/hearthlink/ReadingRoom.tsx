@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
+import { pdfjs } from 'react-pdf';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -16,7 +17,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { getRoom } from '@/lib/rooms';
 
-// PDF.js worker setup is now handled within PdfViewer.tsx
+// Setup PDF.js worker. This needs to be done once per application.
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 export function ReadingRoom({ roomId }: { roomId: string }) {
   const { user: currentUser, loading: authLoading } = useAuth();
