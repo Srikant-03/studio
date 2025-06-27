@@ -143,7 +143,7 @@ export function PdfViewer({ pdfDoc, currentPage, zoom, annotations, highlights, 
         onMouseUp={handleMouseUp}
         title={isDrawingHighlight ? "" : "Click to add an annotation. Hold Alt and drag to highlight."}
       >
-        <canvas ref={canvasRef} />
+        <canvas ref={canvasRef} key={`${currentPage}-${zoom}`} />
         {/* Highlights Layer */}
         <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
           {highlights.map(h => h.rects.map((rect, i) => (
