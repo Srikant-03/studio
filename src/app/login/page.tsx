@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/hooks/use-auth';
@@ -10,6 +10,13 @@ import { FireplaceIcon, GoogleIcon } from '@/components/icons';
 export default function LoginPage() {
   const { user, loading, signInWithGoogle } = useAuth();
   const router = useRouter();
+  const [hostname, setHostname] = useState('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setHostname(window.location.hostname);
+    }
+  }, []);
 
   useEffect(() => {
     if (!loading && user) {
@@ -50,6 +57,15 @@ export default function LoginPage() {
           </Button>
         </CardContent>
       </Card>
+      {hostname && (
+        <div className="mt-6 p-4 bg-muted border rounded-lg text-sm text-center max-w-sm w-full">
+          <p className="font-bold text-foreground">Configuration Tip:</p>
+          <p className="text-muted-foreground mt-1">
+            If you see an "unauthorized-domain" error, add this domain to your Firebase project's authorized domains:
+          </p>
+          <code className="block bg-background p-2 mt-2 rounded-md font-mono text-primary break-all">{hostname}</code>
+        </div>
+      )}
     </div>
   );
 }
