@@ -7,7 +7,7 @@ import 'react-pdf/dist/esm/Page/TextLayer.css';
 import type { Annotation, Highlight, User } from '@/types/hearthlink';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Loader2 } from 'lucide-react';
-import type { PDFPageProxy } from 'pdfjs-dist';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 
 interface PdfViewerProps {
   pdfData: ArrayBuffer;
@@ -18,10 +18,10 @@ interface PdfViewerProps {
   addAnnotation: (annotation: Omit<Annotation, 'id' | 'userId' | 'userName' | 'timestamp' | 'color'>) => void;
   addHighlight: (highlight: Omit<Highlight, 'id' | 'userId' | 'userName' | 'timestamp' | 'color'>) => void;
   currentUser: User | null;
-  onPageLoadSuccess: (page: PDFPageProxy) => void;
+  onDocumentLoadSuccess: (doc: PDFDocumentProxy) => void;
 }
 
-export function PdfViewer({ pdfData, currentPage, zoom, annotations, highlights, addAnnotation, addHighlight, currentUser, onPageLoadSuccess }: PdfViewerProps) {
+export function PdfViewer({ pdfData, currentPage, zoom, annotations, highlights, addAnnotation, addHighlight, currentUser, onDocumentLoadSuccess }: PdfViewerProps) {
   const pageWrapperRef = useRef<HTMLDivElement>(null);
   const [isDrawingHighlight, setIsDrawingHighlight] = useState(false);
   const [highlightStart, setHighlightStart] = useState<{x: number, y: number} | null>(null);
@@ -100,13 +100,13 @@ export function PdfViewer({ pdfData, currentPage, zoom, annotations, highlights,
                 file={pdfData}
                 loading={<div className="flex items-center justify-center p-20"><Loader2 className="h-8 w-8 animate-spin" /></div>}
                 error="Failed to load PDF file."
+                onLoadSuccess={onDocumentLoadSuccess}
             >
                 <Page
                     pageNumber={currentPage}
                     scale={zoom}
                     renderTextLayer={false}
                     renderAnnotationLayer={false}
-                    onLoadSuccess={onPageLoadSuccess}
                 />
             </Document>
         </div>

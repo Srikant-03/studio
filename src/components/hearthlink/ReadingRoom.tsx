@@ -138,7 +138,6 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
       // Use the original (or another copy) for text extraction.
       const doc = await pdfjs.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
       setPdfDoc(doc);
-      setNumPages(doc.numPages);
     } catch (err) {
       console.error("Error loading local PDF:", err);
       const errorMsg = "Could not read the selected PDF file.";
@@ -248,7 +247,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
                 addAnnotation={addAnnotation}
                 addHighlight={addHighlight}
                 currentUser={currentUser}
-                onPageLoadSuccess={(page) => setNumPages(page.doc.numPages)}
+                onDocumentLoadSuccess={(doc) => setNumPages(doc.numPages)}
             />
         </div>
         <Toolbar
