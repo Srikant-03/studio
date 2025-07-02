@@ -17,6 +17,7 @@ import { getRoom } from '@/lib/rooms';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, query, onSnapshot, orderBy, deleteDoc, where, getDocs } from 'firebase/firestore';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { SmartAnnotations } from './SmartAnnotations';
 
 // Setup PDF.js worker. This needs to be done once per application.
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -355,6 +356,8 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
               </ul>
             </ScrollArea>
         </div>
+
+        {pdfDoc && <SmartAnnotations pdfDoc={pdfDoc} currentPage={currentPage} />}
 
         <div className="mt-auto space-y-4 pt-4">
             <div className="space-y-2">
