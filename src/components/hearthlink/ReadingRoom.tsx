@@ -10,7 +10,6 @@ import { FileUp, Loader2, Copy, BookOpen, BookMarked } from 'lucide-react';
 import { PdfViewer } from './PdfViewer';
 import { Toolbar } from './Toolbar';
 import { ChatPanel } from './ChatPanel';
-import { SmartAnnotations } from './SmartAnnotations';
 import type { Annotation, Highlight, ChatMessage, User, Room, Bookmark } from '@/types/hearthlink';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
@@ -326,10 +325,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
   return (
     <div className="flex h-screen w-full bg-background font-body text-foreground overflow-hidden">
       <aside className="w-64 flex-shrink-0 bg-card/80 p-4 border-r overflow-y-auto hidden md:flex flex-col">
-        <h2 className="font-headline text-xl font-bold border-b pb-2 mb-4">Smart Tools</h2>
-        {pdfDoc && <SmartAnnotations pdfDoc={pdfDoc} />}
-
-        <div className="mt-4">
+        <div className="mt-8">
             <h3 className="font-headline text-lg font-bold border-b pb-2 mb-2 flex items-center gap-2">
                 <BookMarked className="w-5 h-5"/>
                 Bookmarks
