@@ -9,8 +9,7 @@ body {
 
 body {
   font-family: Arial, Helvetica, sans-serif;
-  /* The background is now applied to the main content wrapper, not the body */
-  @apply text-foreground;
+  @apply bg-background text-foreground;
 }
 
 @layer base {
