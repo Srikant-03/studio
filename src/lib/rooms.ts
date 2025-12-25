@@ -56,8 +56,11 @@ export async function createRoom(
   return roomRef.id;
 }
 
-export async function joinRoom(roomId: string, userId:string): Promise<boolean> {
+export async function joinRoom(roomId: string, userId:string): Promise<Room | null> {
     const roomRef = doc(db, 'rooms', roomId);
+    const userRef = doc(db, 'users', userId);
+
+    // Get room document first to check if it exists
     const roomSnap = await getDoc(roomRef).catch((serverError) => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
             path: roomRef.path,
@@ -68,10 +71,10 @@ export async function joinRoom(roomId: string, userId:string): Promise<boolean> 
 
     if (!roomSnap.exists()) {
         console.error("Room does not exist");
-        return false;
+        return null;
     }
     
-    // Add user to room's members
+    // Add user to room's members list
     await updateDoc(roomRef, {
         members: arrayUnion(userId)
     }).catch((serverError) => {
@@ -84,7 +87,6 @@ export async function joinRoom(roomId: string, userId:string): Promise<boolean> 
     });
     
     // Add room to user's list
-    const userRef = doc(db, 'users', userId);
     await updateDoc(userRef, {
         rooms: arrayUnion(roomId)
     }).catch((serverError) => {
@@ -96,7 +98,7 @@ export async function joinRoom(roomId: string, userId:string): Promise<boolean> 
         throw serverError;
     });
     
-    return true;
+    return { id: roomSnap.id, ...roomSnap.data() } as Room;
 }
 
 export async function getUserRooms(userId: string): Promise<Room[]> {
@@ -116,26 +118,31 @@ export async function getUserRooms(userId: string): Promise<Room[]> {
     const roomIds: string[] = userSnap.data().rooms;
     if (roomIds.length === 0) return [];
     
-    if (roomIds.length > 10) {
-        console.warn("Fetching more than 10 rooms individually, consider a more scalable query.");
+    // Firestore 'in' queries are limited to 30 elements.
+    // If a user has more than 30 rooms, we need to chunk the requests.
+    const MAX_IN_QUERIES = 30;
+    const roomChunks: string[][] = [];
+    for (let i = 0; i < roomIds.length; i += MAX_IN_QUERIES) {
+        roomChunks.push(roomIds.slice(i, i + MAX_IN_QUERIES));
     }
-    
-    const roomPromises = roomIds
-        .filter(id => typeof id === 'string' && id.trim() !== '') // Ensure IDs are valid strings
-        .map(id => getDoc(doc(db, 'rooms', id)).catch((serverError) => {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({
-                path: doc(db, 'rooms', id).path,
-                operation: 'get',
-            }));
-            // We don't rethrow here, just filter it out later.
-            return null;
-        }));
-    
-    const roomSnapshots = await Promise.all(roomPromises);
 
-    const rooms = roomSnapshots
-        .filter((snap): snap is DocumentSnapshot => snap !== null && snap.exists())
-        .map(snap => ({ id: snap.id, ...snap.data() } as Room));
+    const rooms: Room[] = [];
+    for (const chunk of roomChunks) {
+        if (chunk.length === 0) continue;
+
+        const roomsQuery = query(collection(db, 'rooms'), where('__name__', 'in', chunk));
+        const querySnapshot = await getDocs(roomsQuery).catch(serverError => {
+             errorEmitter.emit('permission-error', new FirestorePermissionError({
+                path: collection(db, 'rooms').path,
+                operation: 'list',
+            }));
+            throw serverError;
+        });
+
+        querySnapshot.forEach((doc) => {
+            rooms.push({ id: doc.id, ...doc.data() } as Room);
+        });
+    }
         
     return rooms;
 }

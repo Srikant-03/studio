@@ -13,7 +13,7 @@ import { ChatPanel } from './ChatPanel';
 import type { Annotation, Highlight, ChatMessage, User, Room, Bookmark } from '@/types/hearthlink';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
-import { getRoom } from '@/lib/rooms';
+import { getRoom, joinRoom } from '@/lib/rooms';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, query, onSnapshot, orderBy, deleteDoc, where, getDocs, serverTimestamp, setDoc } from 'firebase/firestore';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -60,7 +60,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
     if (authLoading || !currentUser) {
         return;
     }
-
+  
     // This effect handles fetching the room data and setting up all real-time listeners.
     // It runs once the user is authenticated.
     
@@ -72,10 +72,11 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
         setCurrentPage(pageNumber);
       }
     }
-
+  
     setUsers([currentUser]);
-
-    getRoom(roomId)
+  
+    // Ensure the user is a member of the room before proceeding
+    joinRoom(roomId, currentUser.id)
       .then(roomData => {
         if (roomData) {
           setRoom(roomData);
@@ -86,7 +87,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
       .catch(err => {
         if (err instanceof FirestorePermissionError) {
           // The error is already being handled by the emitter, just update UI
-          setError("You don't have permission to access this room.");
+          setError("You don't have permission to access this room. Make sure you have the correct room code.");
         } else {
             console.error("Error loading room or PDF:", err);
             let errorMessage = "Failed to load reading room.";
@@ -102,7 +103,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
       .finally(() => {
         setIsLoading(false);
       });
-
+  
   }, [roomId, currentUser, authLoading, toast]);
 
   // Firestore listeners for real-time collaboration
