@@ -18,14 +18,14 @@
   border-radius: 50%;
   animation: rise var(--particle-duration) var(--particle-delay) infinite linear;
   opacity: 0;
+  background-color: var(--particle-color-start);
+  box-shadow: 0 0 4px var(--particle-color-start);
 }
 
 @keyframes rise {
   0% {
     transform: translateY(0) translateX(0);
     opacity: 1;
-    background-color: var(--particle-color-start);
-    box-shadow: 0 0 4px var(--particle-color-start);
   }
   50% {
     background-color: var(--particle-color-mid);
