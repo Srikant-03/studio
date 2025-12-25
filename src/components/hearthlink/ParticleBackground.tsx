@@ -14,7 +14,7 @@ const ParticleBackground: React.FC = () => {
         const style = {
           '--particle-x-start': `${Math.random() * 100}vw`,
           '--particle-x-end': `${Math.random() * 100}vw`,
-          '--particle-y-end': `-${Math.random() * 100 + 100}vh`, // Use negative vh for upward movement
+          '--particle-y-end': `-${Math.random() * 100 + 100}vh`, // Correct upward movement
           '--particle-size': `${Math.random() * 3 + 1}px`,
           '--particle-duration': `${Math.random() * 5 + 5}s`,
           '--particle-delay': `${Math.random() * 5}s`,
