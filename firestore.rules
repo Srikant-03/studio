@@ -9,45 +9,49 @@ service cloud.firestore {
       allow create: if request.auth.uid != null;
     }
 
-    // Rules for rooms
+    // Function to check if the requesting user is a member of a specific room.
+    function isRoomMember(roomId) {
+      return request.auth.uid in get(/databases/$(database)/documents/rooms/$(roomId)).data.members;
+    }
+
+    // Rules for rooms collection
     match /rooms/{roomId} {
-      // Allow a user to read a room document if they are a member of that room.
-      allow read: if request.auth.uid in resource.data.members;
+      // Allow a user to read a room document ONLY if they are a member.
+      allow get: if isRoomMember(roomId);
       
-      // Allow a user to update a room document (e.g., to add a new member) if they are authenticated.
-      // We check for membership on subcollection writes.
-      allow update: if request.auth.uid != null;
-      
-      // Allow a user to create a room if they are authenticated and are listed as the creator and a member.
-      allow create: if request.auth.uid == request.resource.data.creatorId 
-                      && request.auth.uid in request.resource.data.members;
+      // Allow any authenticated user to create a room, as long as they are the creator and first member.
+      allow create: if request.auth.uid != null 
+                    && request.auth.uid == request.resource.data.creatorId
+                    && request.auth.uid in request.resource.data.members;
 
-      // Function to check if the requesting user is a member of the current room.
-      function isRoomMember() {
-        return request.auth.uid in get(/databases/$(database)/documents/rooms/$(roomId)).data.members;
-      }
+      // Allow a user to update a room document (e.g., to add a new member) only if they are already a member.
+      allow update: if isRoomMember(roomId);
+
+      // Disallow listing or deleting rooms from the client.
+      allow list, delete: if false;
       
-      // Annotations
+      // Rules for subcollections within a room
       match /annotations/{annotationId} {
-        allow read, write: if isRoomMember();
+        allow read, write: if isRoomMember(roomId);
       }
 
-      // Highlights
       match /highlights/{highlightId} {
-        allow read, write: if isRoomMember();
+        allow read, write: if isRoomMember(roomId);
       }
 
-      // Messages
       match /messages/{messageId} {
-        allow read: if isRoomMember();
-        allow create: if isRoomMember() && (request.resource.data.userId == request.auth.uid || request.resource.data.userId == 'system');
+        allow read: if isRoomMember(roomId);
+        // User must be a member and the message must be from them (or the system).
+        allow create: if isRoomMember(roomId) 
+                      && (request.resource.data.userId == request.auth.uid || request.resource.data.userId == 'system');
       }
 
-      // Bookmarks
       match /bookmarks/{bookmarkId} {
-        allow read: if isRoomMember();
-        allow create: if isRoomMember() && request.resource.data.userId == request.auth.uid;
-        allow delete: if isRoomMember() && resource.data.userId == request.auth.uid;
+        allow read: if isRoomMember(roomId);
+        // User must be a member and the bookmark must be theirs.
+        allow create: if isRoomMember(roomId) && request.resource.data.userId == request.auth.uid;
+        // User must be a member and the owner of the bookmark to delete it.
+        allow delete: if isRoomMember(roomId) && resource.data.userId == request.auth.uid;
       }
     }
   }
