@@ -24,7 +24,7 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased bg-background">
         <ParticleBackground />
-        <main className="relative z-10 min-h-screen">
+        <main className="min-h-screen">
             <AuthProvider>
               <FirebaseErrorListener />
               {children}
