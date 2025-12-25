@@ -1,6 +1,7 @@
 'use server';
 
-import { getSmartAnnotations, SmartAnnotationInput, SmartAnnotationOutput } from '@/ai/flows/smart-annotation-placement';
+import { getSmartAnnotations } from '@/ai/flows/smart-annotation-placement';
+import type { SmartAnnotationInput, SmartAnnotationOutput } from '@/ai/flows/smart-annotation.types';
 
 export async function runSmartAnnotations(
   input: SmartAnnotationInput
