@@ -15,9 +15,11 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { getRoom } from '@/lib/rooms';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, query, onSnapshot, orderBy, deleteDoc, where, getDocs } from 'firebase/firestore';
+import { collection, addDoc, query, onSnapshot, orderBy, deleteDoc, where, getDocs, serverTimestamp, setDoc } from 'firebase/firestore';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { SmartAnnotations } from './SmartAnnotations';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 // Setup PDF.js worker. This needs to be done once per application.
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -82,56 +84,51 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
         }
       })
       .catch(err => {
-        console.error("Error loading room or PDF:", err);
-        let errorMessage = "Failed to load reading room.";
-        if (err.message.includes('offline')) {
-            errorMessage = "Could not connect to the database. Please ensure Firestore is enabled and configured correctly in your Firebase project."
-        } else if (err.message.includes('Room not found')) {
-            errorMessage = err.message;
+        if (err instanceof FirestorePermissionError) {
+          // The error is already being handled by the emitter, just update UI
+          setError("You don't have permission to access this room.");
+        } else {
+            console.error("Error loading room or PDF:", err);
+            let errorMessage = "Failed to load reading room.";
+            if (err.message.includes('offline')) {
+                errorMessage = "Could not connect to the database. Please ensure Firestore is enabled and configured correctly in your Firebase project."
+            } else if (err.message.includes('Room not found')) {
+                errorMessage = err.message;
+            }
+            setError(errorMessage);
+            toast({ variant: "destructive", title: "Error", description: errorMessage });
         }
-        setError(errorMessage);
-        toast({ variant: "destructive", title: "Error", description: errorMessage });
       })
       .finally(() => {
         setIsLoading(false);
       });
 
-  }, [roomId, currentUser, authLoading]);
+  }, [roomId, currentUser, authLoading, toast]);
 
   // Firestore listeners for real-time collaboration
   useEffect(() => {
     if (!roomId || !currentUser) return;
+    
+    const createSnapshotListener = (collectionName: string, setData: (data: any[]) => void, errorTitle: string) => {
+        const collectionRef = collection(db, 'rooms', roomId, collectionName);
+        const q = query(collectionRef, orderBy('timestamp', 'asc'));
+        
+        return onSnapshot(q, (snapshot) => {
+            const fetchedData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setData(fetchedData);
+        }, (err) => {
+            console.error(`Error fetching ${collectionName}:`, err);
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
+                path: collectionRef.path,
+                operation: 'list',
+            }));
+        });
+    };
 
-    // Listener for Annotations
-    const annotationsRef = collection(db, 'rooms', roomId, 'annotations');
-    const qAnnotations = query(annotationsRef, orderBy('timestamp', 'asc'));
-    const unsubscribeAnnotations = onSnapshot(qAnnotations, (snapshot) => {
-        const fetchedAnnotations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Annotation));
-        setAnnotations(fetchedAnnotations);
-    }, (err) => {
-        console.error("Error fetching annotations:", err);
-        toast({ variant: "destructive", title: "Connection Error", description: "Could not sync annotations." });
-    });
-
-    // Listener for Highlights
-    const highlightsRef = collection(db, 'rooms', roomId, 'highlights');
-    const qHighlights = query(highlightsRef, orderBy('timestamp', 'asc'));
-    const unsubscribeHighlights = onSnapshot(qHighlights, (snapshot) => {
-        const fetchedHighlights = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Highlight));
-        setHighlights(fetchedHighlights);
-    }, (err) => {
-        console.error("Error fetching highlights:", err);
-        toast({ variant: "destructive", title: "Connection Error", description: "Could not sync highlights." });
-    });
-
-     // Listener for Chat Messages
-    const messagesRef = collection(db, 'rooms', roomId, 'messages');
-    const qMessages = query(messagesRef, orderBy('timestamp', 'asc'));
-    const unsubscribeMessages = onSnapshot(qMessages, (snapshot) => {
-      const fetchedMessages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatMessage));
-      setMessages(fetchedMessages);
-    });
-
+    const unsubscribeAnnotations = createSnapshotListener('annotations', setAnnotations, "Could not sync annotations.");
+    const unsubscribeHighlights = createSnapshotListener('highlights', setHighlights, "Could not sync highlights.");
+    const unsubscribeMessages = createSnapshotListener('messages', setMessages, "Could not sync messages.");
+    
     // Listener for Bookmarks
     const bookmarksRef = collection(db, 'rooms', roomId, 'bookmarks');
     const qBookmarks = query(bookmarksRef, orderBy('pageNumber', 'asc'));
@@ -140,7 +137,10 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
         setBookmarks(fetchedBookmarks);
     }, (err) => {
         console.error("Error fetching bookmarks:", err);
-        toast({ variant: "destructive", title: "Connection Error", description: "Could not sync bookmarks." });
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: bookmarksRef.path,
+            operation: 'list',
+        }));
     });
 
 
@@ -150,86 +150,112 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
         unsubscribeMessages();
         unsubscribeBookmarks();
     };
-  }, [roomId, currentUser]);
+  }, [roomId, currentUser, toast]);
 
-  const addAnnotation = async (annotation: Omit<Annotation, 'id' | 'userId' | 'userName' | 'timestamp' | 'color'>) => {
+  const addAnnotation = (annotation: Omit<Annotation, 'id' | 'userId' | 'userName' | 'timestamp' | 'color'>) => {
     if (!currentUser || !roomId) return;
-    try {
       const annotationsRef = collection(db, 'rooms', roomId, 'annotations');
-      await addDoc(annotationsRef, {
+      const data = {
         ...annotation,
         userId: currentUser.id,
         userName: currentUser.name,
-        timestamp: Date.now(),
+        timestamp: serverTimestamp(),
         color: currentUser.color,
-      });
-      addMessage({type: 'system', message: `${currentUser.name} added an annotation on page ${annotation.pageNumber}.`})
-    } catch (error) {
-        console.error("Error adding annotation:", error);
-        toast({ variant: "destructive", title: "Sync Error", description: "Could not save annotation." });
-    }
+      };
+
+      addDoc(annotationsRef, data)
+        .then(() => {
+          addMessage({type: 'system', message: `${currentUser.name} added an annotation on page ${annotation.pageNumber}.`})
+        })
+        .catch((serverError) => {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
+                path: annotationsRef.path,
+                operation: 'create',
+                requestResourceData: data,
+            }));
+        });
   };
 
-  const addHighlight = async (highlight: Omit<Highlight, 'id' | 'userId' | 'userName' | 'timestamp' | 'color'>) => {
+  const addHighlight = (highlight: Omit<Highlight, 'id' | 'userId' | 'userName' | 'timestamp' | 'color'>) => {
     if (!currentUser || !roomId) return;
-    try {
         const highlightsRef = collection(db, 'rooms', roomId, 'highlights');
-        await addDoc(highlightsRef, {
+        const data = {
           ...highlight,
           userId: currentUser.id,
           userName: currentUser.name,
-          timestamp: Date.now(),
+          timestamp: serverTimestamp(),
           color: highlightColor,
-        });
-    } catch (error) {
-        console.error("Error adding highlight:", error);
-        toast({ variant: "destructive", title: "Sync Error", description: "Could not save highlight." });
-    }
+        };
+        addDoc(highlightsRef, data)
+            .catch((serverError) => {
+                errorEmitter.emit('permission-error', new FirestorePermissionError({
+                    path: highlightsRef.path,
+                    operation: 'create',
+                    requestResourceData: data,
+                }));
+            });
   }
 
-  const addMessage = async (message: { type: 'text' | 'system', message: string }) => {
+  const addMessage = (message: { type: 'text' | 'system', message: string }) => {
     if (!currentUser || !roomId) return;
 
     const messagesRef = collection(db, 'rooms', roomId, 'messages');
-    
-    await addDoc(messagesRef, {
+    const data = {
       type: message.type,
       userId: message.type === 'system' ? 'system' : currentUser.id,
       userName: message.type === 'system' ? 'System' : currentUser.name,
       message: message.message,
-      timestamp: Date.now(),
-    });
+      timestamp: serverTimestamp(),
+    };
+    
+    addDoc(messagesRef, data)
+        .catch((serverError) => {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
+                path: messagesRef.path,
+                operation: 'create',
+                requestResourceData: data,
+            }));
+        });
   };
 
   const toggleBookmark = async () => {
     if (!currentUser || !roomId) return;
 
     const existingBookmark = bookmarks.find(b => b.pageNumber === currentPage);
+    const bookmarksRef = collection(db, 'rooms', roomId, 'bookmarks');
 
-    try {
-        if (existingBookmark) {
-            // Remove bookmark
-            const bookmarkRef = collection(db, 'rooms', roomId, 'bookmarks');
-            const q = query(bookmarkRef, where("pageNumber", "==", currentPage), where("userId", "==", currentUser.id));
-            const querySnapshot = await getDocs(q);
-            querySnapshot.forEach(async (doc) => {
-                await deleteDoc(doc.ref);
+    if (existingBookmark) {
+        // Remove bookmark
+        const q = query(bookmarksRef, where("pageNumber", "==", currentPage), where("userId", "==", currentUser.id));
+        const querySnapshot = await getDocs(q); // getDocs doesn't need a catch here as it's a user action.
+        querySnapshot.forEach(async (doc) => {
+            deleteDoc(doc.ref).catch((serverError) => {
+                errorEmitter.emit('permission-error', new FirestorePermissionError({
+                    path: doc.ref.path,
+                    operation: 'delete',
+                }));
             });
-            toast({ title: "Bookmark Removed", description: `Page ${currentPage} removed from bookmarks.` });
-        } else {
-            // Add bookmark
-            const bookmarksRef = collection(db, 'rooms', roomId, 'bookmarks');
-            await addDoc(bookmarksRef, {
-                userId: currentUser.id,
-                userName: currentUser.name,
-                pageNumber: currentPage,
-                timestamp: Date.now(),
+        });
+        toast({ title: "Bookmark Removed", description: `Page ${currentPage} removed from bookmarks.` });
+    } else {
+        // Add bookmark
+        const data = {
+            userId: currentUser.id,
+            userName: currentUser.name,
+            pageNumber: currentPage,
+            timestamp: serverTimestamp(),
+        };
+        addDoc(bookmarksRef, data)
+            .then(() => {
+                toast({ title: "Bookmarked!", description: `Page ${currentPage} has been added to bookmarks.` });
+            })
+            .catch((serverError) => {
+                errorEmitter.emit('permission-error', new FirestorePermissionError({
+                    path: bookmarksRef.path,
+                    operation: 'create',
+                    requestResourceData: data,
+                }));
             });
-            toast({ title: "Bookmarked!", description: `Page ${currentPage} has been added to bookmarks.` });
-        }
-    } catch (error) {
-        console.error("Error toggling bookmark:", error);
-        toast({ variant: "destructive", title: "Sync Error", description: "Could not update bookmark." });
     }
   };
 
