@@ -10,6 +10,7 @@ import {
   query,
   where,
   getDocs,
+  DocumentSnapshot,
 } from 'firebase/firestore';
 import type { Room } from '@/types/hearthlink';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -115,7 +116,10 @@ export async function getUserRooms(userId: string): Promise<Room[]> {
     const roomIds: string[] = userSnap.data().rooms;
     if (roomIds.length === 0) return [];
     
-    // Fetch each room document individually to avoid potential 'in' query issues.
+    if (roomIds.length > 10) {
+        console.warn("Fetching more than 10 rooms individually, consider a more scalable query.");
+    }
+    
     const roomPromises = roomIds
         .filter(id => typeof id === 'string' && id.trim() !== '') // Ensure IDs are valid strings
         .map(id => getDoc(doc(db, 'rooms', id)).catch((serverError) => {
@@ -130,7 +134,7 @@ export async function getUserRooms(userId: string): Promise<Room[]> {
     const roomSnapshots = await Promise.all(roomPromises);
 
     const rooms = roomSnapshots
-        .filter((snap): snap is import('firebase/firestore').DocumentSnapshot => snap !== null && snap.exists())
+        .filter((snap): snap is DocumentSnapshot => snap !== null && snap.exists())
         .map(snap => ({ id: snap.id, ...snap.data() } as Room));
         
     return rooms;

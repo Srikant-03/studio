@@ -11,7 +11,12 @@ service cloud.firestore {
 
     // Rules for rooms
     match /rooms/{roomId} {
-      allow read: if request.auth.uid in resource.data.members;
+      // Any authenticated user can read the room's main document,
+      // but listing rooms is disallowed.
+      allow get: if request.auth.uid != null;
+      // Only members can list rooms (e.g. in their bookshelf)
+      allow list: if request.auth.uid in resource.data.members;
+
       allow create: if request.auth.uid == request.resource.data.creatorId && request.auth.uid in request.resource.data.members;
       allow update: if request.auth.uid in resource.data.members;
 
@@ -41,7 +46,7 @@ service cloud.firestore {
       // Bookmarks
       match /bookmarks/{bookmarkId} {
         allow read: if isRoomMember();
-        allow create: if isRoomMember() && request.resource.data.userId == request.auth.uid;
+        allow create: if isRoomMemb er() && request.resource.data.userId == request.auth.uid;
         allow delete: if isRoomMember() && resource.data.userId == request.auth.uid;
       }
     }
