@@ -3,6 +3,7 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
 import { AuthProvider } from '@/hooks/use-auth';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
+import ParticleBackground from '@/components/hearthlink/ParticleBackground';
 
 export const metadata: Metadata = {
   title: 'HearthLink',
@@ -22,6 +23,7 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased">
+        <ParticleBackground />
         <AuthProvider>
           <FirebaseErrorListener />
           {children}
