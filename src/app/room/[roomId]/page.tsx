@@ -1,9 +1,10 @@
 import RoomClient from '@/components/hearthlink/RoomClient';
 
-export default function RoomPage({
+export default async function RoomPage({
   params,
 }: {
-  params: { roomId: string };
+  params: Promise<{ roomId: string }>;
 }) {
-  return <RoomClient roomId={params.roomId} />;
+  const { roomId } = await params;
+  return <RoomClient roomId={roomId} />;
 }
