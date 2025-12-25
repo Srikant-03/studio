@@ -54,3 +54,44 @@ After the server has started successfully, you will see a message in your termin
 [http://localhost:9002](http://localhost:9002)
 
 Any changes you make to the source code will automatically be reflected in the browser.
+
+## Deploying to Firebase
+
+This application is configured for deployment using [Firebase App Hosting](https://firebase.google.com/docs/hosting/app-hosting-vs-web-hosting). The `apphosting.yaml` file in the root directory contains the basic configuration.
+
+To deploy your application, you will need to have the [Firebase CLI](https://firebase.google.com/docs/cli) installed.
+
+### 1. Install Firebase CLI
+
+If you don't have it installed, run the following command in your terminal:
+```bash
+npm install -g firebase-tools
+```
+
+### 2. Log in to Firebase
+
+Log in to your Google account using the Firebase CLI. This will open a browser window for you to authenticate.
+```bash
+firebase login
+```
+
+### 3. Initialize Firebase in Your Project
+
+In your project's root directory, run the `init` command for App Hosting.
+```bash
+firebase init apphosting
+```
+The CLI will guide you through the process:
+*   You will be asked to select a Firebase project. Choose the project that this app is connected to (the one with `projectId: "gen-lang-client-0460363684"`).
+*   It will ask you for a "backend ID". You can give it a name like `hearthlink-backend`.
+*   When it asks for the region, you can choose the one closest to your users.
+
+This process will create a `firebase.json` file to link your local code to your Firebase project.
+
+### 4. Deploy Your Application
+
+After initialization, you can deploy your app with a single command:
+```bash
+firebase deploy
+```
+This command will build your Next.js application for production and deploy it to Firebase App Hosting. Once it's finished, the CLI will output the URL where your live application is hosted.
