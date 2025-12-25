@@ -16,7 +16,14 @@ const ReadingRoom = dynamic(
   }
 );
 
+interface PageProps {
+  params: {
+    roomId: string;
+  };
+  searchParams?: { [key: string]: string | string[] | undefined };
+}
+
 // This component now correctly handles the props passed by Next.js App Router.
-export default function RoomPage({ params }: { params: { roomId: string } }) {
+export default function RoomPage({ params }: PageProps) {
   return <ReadingRoom roomId={params.roomId} />;
 }
