@@ -24,13 +24,13 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased">
         <ParticleBackground />
-        <main className="min-h-screen relative z-10">
-            <AuthProvider>
-              <FirebaseErrorListener />
-              {children}
-              <Toaster />
-            </AuthProvider>
-        </main>
+        <div className="relative z-10 min-h-screen bg-background">
+          <AuthProvider>
+            <FirebaseErrorListener />
+            {children}
+            <Toaster />
+          </AuthProvider>
+        </div>
       </body>
     </html>
   );

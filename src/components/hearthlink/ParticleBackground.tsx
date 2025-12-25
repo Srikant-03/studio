@@ -7,13 +7,14 @@ const ParticleBackground: React.FC = () => {
   const [particles, setParticles] = useState<JSX.Element[]>([]);
 
   useEffect(() => {
+    // This effect runs only on the client, avoiding hydration mismatches.
     const generateParticles = () => {
       const numParticles = 50; 
       const newParticles = Array.from({ length: numParticles }).map((_, i) => {
         const style = {
           '--particle-x-start': `${Math.random() * 100}vw`,
           '--particle-x-end': `${Math.random() * 100}vw`,
-          '--particle-y-end': `-${Math.random() * 100 + 100}vh`,
+          '--particle-y-end': `-${Math.random() * 100 + 100}vh`, // Use negative vh for upward movement
           '--particle-size': `${Math.random() * 3 + 1}px`,
           '--particle-duration': `${Math.random() * 5 + 5}s`,
           '--particle-delay': `${Math.random() * 5}s`,
@@ -27,7 +28,6 @@ const ParticleBackground: React.FC = () => {
       setParticles(newParticles);
     };
 
-    // Avoid hydration errors by only generating particles on the client
     generateParticles();
   }, []);
 
