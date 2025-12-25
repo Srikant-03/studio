@@ -22,9 +22,9 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet" />
       </head>
-      <body className="font-body antialiased">
+      <body className="font-body antialiased bg-background">
         <ParticleBackground />
-        <div className="relative z-10">
+        <div className="relative z-10 min-h-screen">
           <AuthProvider>
             <FirebaseErrorListener />
             {children}
