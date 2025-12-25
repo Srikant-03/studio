@@ -5,7 +5,7 @@ import {devLogger, startDevServer} from '@genkit-ai/dotprompt';
 export const ai = genkit({
   plugins: [
     googleAI({
-      apiKey: process.env.GOOGLE_API_KEY,
+      apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY,
     }),
   ],
   // Use a simple file-based trace store for development.
