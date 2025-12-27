@@ -28,7 +28,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4 font-body">
+    <div className="flex min-h-screen flex-col items-center justify-center p-4 font-body">
       <div className="flex flex-col items-center text-center mb-8">
         <FireplaceIcon className="h-20 w-20 text-primary mb-4" />
         <h1 className="text-5xl font-headline font-bold text-foreground">

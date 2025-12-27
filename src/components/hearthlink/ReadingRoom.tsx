@@ -15,9 +15,10 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { getRoom, joinRoom } from '@/lib/rooms';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, query, onSnapshot, orderBy, deleteDoc, where, getDocs, serverTimestamp, setDoc } from 'firebase/firestore';
+import { collection, addDoc, query, onSnapshot, orderBy, deleteDoc, where, getDocs, getDoc, serverTimestamp, setDoc, doc } from 'firebase/firestore';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { SmartAnnotations } from './SmartAnnotations';
+import { Trash2, MessageSquarePlus, Highlighter } from 'lucide-react';
+
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
@@ -34,7 +35,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  
+
   const [currentPage, setCurrentPage] = useState(1);
   const [numPages, setNumPages] = useState(0);
   const [zoom, setZoom] = useState(1);
@@ -55,15 +56,15 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
     if (!roomId || currentPage === 1) return; // Don't save initial state
     localStorage.setItem(`hearthlink-lastpage-${roomId}`, String(currentPage));
   }, [currentPage, roomId]);
-  
+
   useEffect(() => {
     if (authLoading || !currentUser) {
-        return;
+      return;
     }
-  
+
     // This effect handles fetching the room data and setting up all real-time listeners.
     // It runs once the user is authenticated.
-    
+
     // Restore last viewed page once authenticated
     const lastPage = localStorage.getItem(`hearthlink-lastpage-${roomId}`);
     if (lastPage) {
@@ -72,14 +73,35 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
         setCurrentPage(pageNumber);
       }
     }
-  
-    setUsers([currentUser]);
-  
+
+    // Initial set moved to fetch logic
+    // setUsers([currentUser]);
+
     // Ensure the user is a member of the room before proceeding
     joinRoom(roomId, currentUser.id)
-      .then(roomData => {
+      .then(async (roomData) => {
         if (roomData) {
           setRoom(roomData);
+
+          // Fetch all room members for "Readers by the Fire"
+          if (roomData.members && roomData.members.length > 0) {
+            try {
+              const usersRef = collection(db, 'users');
+              // Firestore 'in' query supports max 10 values. For now assume < 10 or take first 10.
+              // A better way is Promise.all(getDoc).
+              const memberPromises = roomData.members.map(mid => getDoc(doc(db, 'users', mid)));
+              const memberSnapshots = await Promise.all(memberPromises);
+              const members = memberSnapshots
+                .filter(doc => doc.exists())
+                .map(doc => ({ id: doc.id, ...doc.data() } as User));
+
+              setUsers(members); // Set ALL members
+            } catch (err) {
+              console.error("Failed to fetch room members:", err);
+              // Fallback to just current user if fetch fails
+              setUsers([currentUser]);
+            }
+          }
         } else {
           throw new Error("Room not found. It might have been deleted or the code is incorrect.");
         }
@@ -89,112 +111,112 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
           // The error is already being handled by the emitter, just update UI
           setError("You don't have permission to access this room. Make sure you have the correct room code.");
         } else {
-            console.error("Error loading room or PDF:", err);
-            let errorMessage = "Failed to load reading room.";
-            if (err.message.includes('offline')) {
-                errorMessage = "Could not connect to the database. Please ensure Firestore is enabled and configured correctly in your Firebase project."
-            } else if (err.message.includes('Room not found')) {
-                errorMessage = err.message;
-            }
-            setError(errorMessage);
-            toast({ variant: "destructive", title: "Error", description: errorMessage });
+          console.error("Error loading room or PDF:", err);
+          let errorMessage = "Failed to load reading room.";
+          if (err.message.includes('offline')) {
+            errorMessage = "Could not connect to the database. Please ensure Firestore is enabled and configured correctly in your Firebase project."
+          } else if (err.message.includes('Room not found')) {
+            errorMessage = err.message;
+          }
+          setError(errorMessage);
+          toast({ variant: "destructive", title: "Error", description: errorMessage });
         }
       })
       .finally(() => {
         setIsLoading(false);
       });
-  
+
   }, [roomId, currentUser, authLoading, toast]);
 
   // Firestore listeners for real-time collaboration
   useEffect(() => {
     if (!roomId || !currentUser) return;
-    
+
     const createSnapshotListener = (collectionName: string, setData: (data: any[]) => void, errorTitle: string) => {
-        const collectionRef = collection(db, 'rooms', roomId, collectionName);
-        const q = query(collectionRef, orderBy('timestamp', 'asc'));
-        
-        return onSnapshot(q, (snapshot) => {
-            const fetchedData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setData(fetchedData);
-        }, (err) => {
-            console.error(`Error fetching ${collectionName}:`, err);
-            errorEmitter.emit('permission-error', new FirestorePermissionError({
-                path: collectionRef.path,
-                operation: 'list',
-            }));
-        });
+      const collectionRef = collection(db, 'rooms', roomId, collectionName);
+      const q = query(collectionRef, orderBy('timestamp', 'asc'));
+
+      return onSnapshot(q, (snapshot) => {
+        const fetchedData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setData(fetchedData);
+      }, (err) => {
+        console.error(`Error fetching ${collectionName}:`, err);
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: collectionRef.path,
+          operation: 'list',
+        }));
+      });
     };
 
     const unsubscribeAnnotations = createSnapshotListener('annotations', setAnnotations, "Could not sync annotations.");
     const unsubscribeHighlights = createSnapshotListener('highlights', setHighlights, "Could not sync highlights.");
     const unsubscribeMessages = createSnapshotListener('messages', setMessages, "Could not sync messages.");
-    
+
     // Listener for Bookmarks
     const bookmarksRef = collection(db, 'rooms', roomId, 'bookmarks');
     const qBookmarks = query(bookmarksRef, orderBy('pageNumber', 'asc'));
     const unsubscribeBookmarks = onSnapshot(qBookmarks, (snapshot) => {
-        const fetchedBookmarks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Bookmark));
-        setBookmarks(fetchedBookmarks);
+      const fetchedBookmarks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Bookmark));
+      setBookmarks(fetchedBookmarks);
     }, (err) => {
-        console.error("Error fetching bookmarks:", err);
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: bookmarksRef.path,
-            operation: 'list',
-        }));
+      console.error("Error fetching bookmarks:", err);
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: bookmarksRef.path,
+        operation: 'list',
+      }));
     });
 
 
     return () => {
-        unsubscribeAnnotations();
-        unsubscribeHighlights();
-        unsubscribeMessages();
-        unsubscribeBookmarks();
+      unsubscribeAnnotations();
+      unsubscribeHighlights();
+      unsubscribeMessages();
+      unsubscribeBookmarks();
     };
   }, [roomId, currentUser, toast]);
 
   const addAnnotation = (annotation: Omit<Annotation, 'id' | 'userId' | 'userName' | 'timestamp' | 'color'>) => {
     if (!currentUser || !roomId) return;
-      const annotationsRef = collection(db, 'rooms', roomId, 'annotations');
-      const data = {
-        ...annotation,
-        userId: currentUser.id,
-        userName: currentUser.name,
-        timestamp: serverTimestamp(),
-        color: currentUser.color,
-      };
+    const annotationsRef = collection(db, 'rooms', roomId, 'annotations');
+    const data = {
+      ...annotation,
+      userId: currentUser.id,
+      userName: currentUser.name,
+      timestamp: serverTimestamp(),
+      color: currentUser.color,
+    };
 
-      addDoc(annotationsRef, data)
-        .then(() => {
-          addMessage({type: 'system', message: `${currentUser.name} added an annotation on page ${annotation.pageNumber}.`})
-        })
-        .catch((serverError) => {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({
-                path: annotationsRef.path,
-                operation: 'create',
-                requestResourceData: data,
-            }));
-        });
+    addDoc(annotationsRef, data)
+      .then(() => {
+        addMessage({ type: 'system', message: `${currentUser.name} added an annotation on page ${annotation.pageNumber}.` })
+      })
+      .catch((serverError) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: annotationsRef.path,
+          operation: 'create',
+          requestResourceData: data,
+        }));
+      });
   };
 
   const addHighlight = (highlight: Omit<Highlight, 'id' | 'userId' | 'userName' | 'timestamp' | 'color'>) => {
     if (!currentUser || !roomId) return;
-        const highlightsRef = collection(db, 'rooms', roomId, 'highlights');
-        const data = {
-          ...highlight,
-          userId: currentUser.id,
-          userName: currentUser.name,
-          timestamp: serverTimestamp(),
-          color: highlightColor,
-        };
-        addDoc(highlightsRef, data)
-            .catch((serverError) => {
-                errorEmitter.emit('permission-error', new FirestorePermissionError({
-                    path: highlightsRef.path,
-                    operation: 'create',
-                    requestResourceData: data,
-                }));
-            });
+    const highlightsRef = collection(db, 'rooms', roomId, 'highlights');
+    const data = {
+      ...highlight,
+      userId: currentUser.id,
+      userName: currentUser.name,
+      timestamp: serverTimestamp(),
+      color: highlightColor,
+    };
+    addDoc(highlightsRef, data)
+      .catch((serverError) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: highlightsRef.path,
+          operation: 'create',
+          requestResourceData: data,
+        }));
+      });
   }
 
   const addMessage = (message: { type: 'text' | 'system', message: string }) => {
@@ -208,15 +230,15 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
       message: message.message,
       timestamp: serverTimestamp(),
     };
-    
+
     addDoc(messagesRef, data)
-        .catch((serverError) => {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({
-                path: messagesRef.path,
-                operation: 'create',
-                requestResourceData: data,
-            }));
-        });
+      .catch((serverError) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: messagesRef.path,
+          operation: 'create',
+          requestResourceData: data,
+        }));
+      });
   };
 
   const toggleBookmark = async () => {
@@ -226,37 +248,37 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
     const bookmarksRef = collection(db, 'rooms', roomId, 'bookmarks');
 
     if (existingBookmark) {
-        // Remove bookmark
-        const q = query(bookmarksRef, where("pageNumber", "==", currentPage), where("userId", "==", currentUser.id));
-        const querySnapshot = await getDocs(q); // getDocs doesn't need a catch here as it's a user action.
-        querySnapshot.forEach(async (doc) => {
-            deleteDoc(doc.ref).catch((serverError) => {
-                errorEmitter.emit('permission-error', new FirestorePermissionError({
-                    path: doc.ref.path,
-                    operation: 'delete',
-                }));
-            });
+      // Remove bookmark
+      const q = query(bookmarksRef, where("pageNumber", "==", currentPage), where("userId", "==", currentUser.id));
+      const querySnapshot = await getDocs(q); // getDocs doesn't need a catch here as it's a user action.
+      querySnapshot.forEach(async (doc) => {
+        deleteDoc(doc.ref).catch((serverError) => {
+          errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: doc.ref.path,
+            operation: 'delete',
+          }));
         });
-        toast({ title: "Bookmark Removed", description: `Page ${currentPage} removed from bookmarks.` });
+      });
+      toast({ title: "Bookmark Removed", description: `Page ${currentPage} removed from bookmarks.` });
     } else {
-        // Add bookmark
-        const data = {
-            userId: currentUser.id,
-            userName: currentUser.name,
-            pageNumber: currentPage,
-            timestamp: serverTimestamp(),
-        };
-        addDoc(bookmarksRef, data)
-            .then(() => {
-                toast({ title: "Bookmarked!", description: `Page ${currentPage} has been added to bookmarks.` });
-            })
-            .catch((serverError) => {
-                errorEmitter.emit('permission-error', new FirestorePermissionError({
-                    path: bookmarksRef.path,
-                    operation: 'create',
-                    requestResourceData: data,
-                }));
-            });
+      // Add bookmark
+      const data = {
+        userId: currentUser.id,
+        userName: currentUser.name,
+        pageNumber: currentPage,
+        timestamp: serverTimestamp(),
+      };
+      addDoc(bookmarksRef, data)
+        .then(() => {
+          toast({ title: "Bookmarked!", description: `Page ${currentPage} has been added to bookmarks.` });
+        })
+        .catch((serverError) => {
+          errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: bookmarksRef.path,
+            operation: 'create',
+            requestResourceData: data,
+          }));
+        });
     }
   };
 
@@ -278,9 +300,9 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
       const arrayBuffer = await file.arrayBuffer();
       const pdfDataCopy = arrayBuffer.slice(0); // Create a copy for the viewer
       setPdfData(pdfDataCopy);
-      
+
       const doc = await pdfjs.getDocument({ data: arrayBuffer }).promise;
-      setPdfDoc(doc);
+      setPdfDoc(doc as any);
     } catch (err) {
       console.error("Error loading local PDF:", err);
       const errorMsg = "Could not read the selected PDF file.";
@@ -295,7 +317,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
     navigator.clipboard.writeText(roomId);
     toast({ title: "Copied!", description: "Room code copied to clipboard." });
   }
-  
+
   if (isLoading || authLoading) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background text-foreground">
@@ -322,7 +344,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
   }
 
   if (!pdfData) {
-     return (
+    return (
       <div className="flex h-screen w-full items-center justify-center bg-background text-foreground">
         <Card className="w-full max-w-lg shadow-xl">
           <CardHeader className="text-center">
@@ -331,12 +353,12 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-lg border-2 border-dashed border-border p-6 text-center">
-              <BookOpen className="mx-auto h-12 w-12 text-muted-foreground"/>
+              <BookOpen className="mx-auto h-12 w-12 text-muted-foreground" />
               <p className="mt-2 font-semibold">Select "{room?.pdfName}"</p>
             </div>
-            <Input id="pdf-upload" type="file" accept=".pdf" onChange={handleFileSelect} className="hidden"/>
+            <Input id="pdf-upload" type="file" accept=".pdf" onChange={handleFileSelect} className="hidden" />
             <Button onClick={() => document.getElementById('pdf-upload')?.click()} className="w-full">
-              <FileUp className="mr-2 h-4 w-4"/>
+              <FileUp className="mr-2 h-4 w-4" />
               Choose File from Computer
             </Button>
             {uploadError && (
@@ -350,64 +372,192 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
 
   const isPageBookmarked = bookmarks.some(b => b.pageNumber === currentPage);
 
+  const deleteGeneric = async (collectionName: string, docId: string) => {
+    if (!roomId) return;
+    const ref = doc(db, 'rooms', roomId, collectionName, docId);
+    await deleteDoc(ref).catch((serverError) => {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: ref.path,
+        operation: 'delete',
+      }));
+    });
+  }
+
+  const clearChat = async () => {
+    if (!roomId) return;
+    // In a real app we'd use a batch. Here we just loop (inefficient for large chats but fine for small rooms).
+    // Or better, we can't easily delete collection without cloud functions.
+    // But we can delete individual messages.
+    // Actually, user wants "Clear Chat".
+    // Let's iterate messages and delete them.
+    const messagesRef = collection(db, 'rooms', roomId, 'messages');
+    const snapshot = await getDocs(messagesRef); // We already have 'messages' state, but good to be sure.
+    snapshot.forEach((doc) => deleteDoc(doc.ref));
+    toast({ title: "Chat Cleared", description: "All messages have been deleted." });
+  }
+
+  const isOwner = room?.creatorId === currentUser?.id;
+
+  console.log("ReadingRoom Debug:", {
+    roomId,
+    roomName: room?.name,
+    creatorId: room?.creatorId,
+    currentUserId: currentUser?.id,
+    isOwner,
+    usersLen: users.length
+  });
+
   return (
-    <div className="flex h-screen w-full bg-background font-body text-foreground overflow-hidden">
-      <aside className="w-64 flex-shrink-0 bg-card/80 p-4 border-r overflow-y-auto hidden md:flex flex-col">
-        <div className="mt-8">
-            <h3 className="font-headline text-lg font-bold border-b pb-2 mb-2 flex items-center gap-2">
-                <BookMarked className="w-5 h-5"/>
-                Bookmarks
-            </h3>
-            <ScrollArea className="h-32">
-              <ul className="space-y-1 pr-2">
-                {bookmarks.length > 0 ? (
-                  bookmarks
-                    .sort((a, b) => a.pageNumber - b.pageNumber)
-                    .map(bookmark => (
-                      <li key={bookmark.id}>
-                        <Button
-                          variant="ghost"
-                          className="w-full justify-start text-left h-auto py-1"
-                          onClick={() => setCurrentPage(bookmark.pageNumber)}
-                        >
-                          Page {bookmark.pageNumber}
-                          <span className="text-muted-foreground ml-auto text-xs">
-                            {bookmark.userName.split(' ')[0]}
-                          </span>
+    <div className="flex h-screen w-full font-body text-foreground overflow-hidden relative z-10 bg-transparent">
+      <aside className="w-64 flex-shrink-0 bg-card/80 p-4 border-r overflow-y-auto hidden md:flex flex-col backdrop-blur-sm">
+        <div className="mb-6">
+          <h3 className="font-headline text-lg font-bold border-b pb-2 mb-2">Room Invite</h3>
+          <div className="flex items-center gap-2">
+            <div className="bg-background/50 border rounded px-2 py-1 text-xs font-mono truncate flex-1" title={roomId}>
+              {roomId}
+            </div>
+            <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => { navigator.clipboard.writeText(roomId); toast({ title: "Copied!", description: "Room ID copied to clipboard." }) }} title="Copy Room ID">
+              <Copy className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+        <div className="mt-2">
+          <h3 className="font-headline text-lg font-bold border-b pb-2 mb-2 flex items-center gap-2 justify-between">
+            <span className="flex items-center gap-2"><BookMarked className="w-5 h-5" /> Bookmarks</span>
+          </h3>
+          <ScrollArea className="h-32">
+            <ul className="space-y-1 pr-2">
+              {bookmarks.length > 0 ? (
+                bookmarks
+                  .sort((a, b) => a.pageNumber - b.pageNumber)
+                  .map(bookmark => (
+                    <li key={bookmark.id} className="flex items-center group">
+                      <Button
+                        variant="ghost"
+                        className="w-full justify-start text-left h-auto py-1"
+                        onClick={() => setCurrentPage(bookmark.pageNumber)}
+                      >
+                        Page {bookmark.pageNumber}
+                        <span className="text-muted-foreground ml-auto text-xs">
+                          {bookmark.userName.split(' ')[0]}
+                        </span>
+                      </Button>
+                      {(isOwner || String(bookmark.userId) === String(currentUser?.id)) && (
+                        <Button variant="ghost" size="icon" className="h-6 w-6 opacity-100 hover:text-destructive transition-colors" onClick={() => deleteGeneric('bookmarks', bookmark.id)}>
+                          <Trash2 className="h-3 w-3 text-destructive" />
                         </Button>
-                      </li>
-                    ))
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center p-4">No bookmarks yet.</p>
-                )}
-              </ul>
-            </ScrollArea>
+                      )}
+                    </li>
+                  ))
+              ) : (
+                <p className="text-sm text-muted-foreground text-center p-4">No bookmarks yet.</p>
+              )}
+            </ul>
+          </ScrollArea>
+
+          <h3 className="font-headline text-lg font-bold border-b pb-2 mb-2 flex items-center gap-2 justify-between">
+            <span className="flex items-center gap-2"><Highlighter className="w-5 h-5" /> Highlights</span>
+            {isOwner && highlights.length > 0 && (
+              <Button variant="ghost" size="sm" onClick={() => { if (confirm("Clear all highlights?")) highlights.forEach(h => deleteGeneric('highlights', h.id)) }} className="h-6 text-xs text-destructive px-2">
+                Clear
+              </Button>
+            )}
+          </h3>
+          <ScrollArea className="h-32 mb-6">
+            <ul className="space-y-1 pr-2">
+              {highlights.length > 0 ? (
+                highlights
+                  .sort((a, b) => a.pageNumber - b.pageNumber)
+                  .map(highlight => (
+                    <li key={highlight.id} className="flex items-center group">
+                      <Button
+                        variant="ghost"
+                        className="w-full justify-start text-left h-auto py-1"
+                        onClick={() => setCurrentPage(highlight.pageNumber)}
+                      >
+                        <span className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: highlight.color }}></span>
+                        Page {highlight.pageNumber}
+                        <span className="text-muted-foreground ml-auto text-xs">
+                          {highlight.userName.split(' ')[0]}
+                        </span>
+                      </Button>
+                      {(isOwner || String(highlight.userId) === String(currentUser?.id)) && (
+                        <Button variant="ghost" size="icon" className="h-6 w-6 opacity-100 hover:text-destructive transition-colors" onClick={() => deleteGeneric('highlights', highlight.id)} title="Delete Highlight">
+                          <Trash2 className="h-3 w-3 text-destructive" />
+                        </Button>
+                      )}
+                    </li>
+                  ))
+              ) : (
+                <p className="text-sm text-muted-foreground text-center p-4">No highlights yet.</p>
+              )}
+            </ul>
+          </ScrollArea>
+
+          <h3 className="font-headline text-lg font-bold border-b pb-2 mb-2 flex items-center gap-2 justify-between">
+            <span className="flex items-center gap-2"><MessageSquarePlus className="w-5 h-5" /> Annotations</span>
+            {isOwner && annotations.length > 0 && (
+              <Button variant="ghost" size="sm" onClick={() => { if (confirm("Clear all annotations?")) annotations.forEach(a => deleteGeneric('annotations', a.id)) }} className="h-6 text-xs text-destructive px-2">
+                Clear
+              </Button>
+            )}
+          </h3>
+          <ScrollArea className="h-32 mb-6">
+            <ul className="space-y-1 pr-2">
+              {annotations.length > 0 ? (
+                annotations
+                  .sort((a, b) => a.pageNumber - b.pageNumber)
+                  .map(annotation => (
+                    <li key={annotation.id} className="flex items-center group">
+                      <Button
+                        variant="ghost"
+                        className="w-full justify-start text-left h-auto py-1 truncate"
+                        onClick={() => setCurrentPage(annotation.pageNumber)}
+                        title={annotation.content}
+                      >
+                        <span className="truncate flex-1">{annotation.content} (P.{annotation.pageNumber})</span>
+                      </Button>
+                      {(isOwner || String(annotation.userId) === String(currentUser?.id)) && (
+                        <Button variant="ghost" size="icon" className="h-6 w-6 opacity-100 hover:text-destructive transition-colors" onClick={() => deleteGeneric('annotations', annotation.id)}>
+                          <Trash2 className="h-3 w-3 text-destructive" />
+                        </Button>
+                      )}
+                    </li>
+                  ))
+              ) : (
+                <p className="text-sm text-muted-foreground text-center p-4">No annotations yet.</p>
+              )}
+            </ul>
+          </ScrollArea>
         </div>
 
-        {pdfDoc && <SmartAnnotations pdfDoc={pdfDoc} currentPage={currentPage} />}
+
 
         <div className="mt-auto space-y-4 pt-4">
-            <div className="space-y-2">
-                <h3 className="font-headline text-lg font-bold border-b pb-2">Invite Friends</h3>
-                <p className="text-sm text-muted-foreground">Share this code to invite others:</p>
-                <div className="flex items-center gap-2">
-                    <Input readOnly value={roomId} className="bg-muted"/>
-                    <Button size="icon" variant="ghost" onClick={copyRoomId}>
-                        <Copy className="h-4 w-4" />
-                    </Button>
-                </div>
+          <div className="space-y-2">
+            <h3 className="font-headline text-lg font-bold border-b pb-2">Invite Friends</h3>
+            <p className="text-sm text-muted-foreground">Share this code to invite others:</p>
+            <div className="flex items-center gap-2">
+              <Input readOnly value={roomId} className="bg-muted" />
+              <Button size="icon" variant="ghost" onClick={copyRoomId}>
+                <Copy className="h-4 w-4" />
+              </Button>
             </div>
-            <h3 className="font-headline text-lg font-bold border-b pb-2">Readers by the Fire</h3>
-            <ul className="space-y-2">
-                {users.map(user => (
-                    <li key={user.id} className="flex items-center">
-                        <span className="h-3 w-3 rounded-full mr-2" style={{ backgroundColor: user.color }}></span>
-                        <span>{user.name}</span>
-                    </li>
-                ))}
-            </ul>
+          </div>
+          <h3 className="font-headline text-lg font-bold border-b pb-2">Readers by the Fire</h3>
+          <ul className="space-y-2">
+            {users.map(user => (
+              <li key={user.id} className="flex items-center">
+                <span className="h-3 w-3 rounded-full mr-2" style={{ backgroundColor: user.color }}></span>
+                <span>{user.name}</span>
+              </li>
+            ))}
+          </ul>
         </div>
-      </aside>
+        <div className="mt-4 pt-4 border-t text-xs text-muted-foreground opacity-70 break-all px-2">
+          <p>Debug ID: {currentUser?.id}</p>
+        </div>
+      </aside >
       <main className="flex-1 flex flex-col">
         <header className="flex-shrink-0 border-b p-2 text-center bg-card/80">
           <h1 className="font-headline text-2xl font-bold">{room?.name}</h1>
@@ -420,21 +570,23 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
           )}
         </header>
         <div className="flex-1 relative overflow-hidden">
-            <PdfViewer
-                pdfData={pdfData}
-                currentPage={currentPage}
-                zoom={zoom}
-                annotations={annotations}
-                highlights={highlights}
-                addAnnotation={addAnnotation}
-                addHighlight={addHighlight}
-                currentUser={currentUser}
-                onDocumentLoadSuccess={(doc) => setNumPages(doc.numPages)}
-                isDualPage={isDualPage}
-                numPages={numPages}
-                interactionMode={interactionMode}
-                highlightColor={highlightColor}
-            />
+          <PdfViewer
+            pdfData={pdfData}
+            currentPage={currentPage}
+            zoom={zoom}
+            annotations={annotations}
+            highlights={highlights}
+            addAnnotation={addAnnotation}
+            addHighlight={addHighlight}
+            currentUser={currentUser}
+            onDocumentLoadSuccess={(doc) => setNumPages(doc.numPages)}
+            isDualPage={isDualPage}
+            numPages={numPages}
+            interactionMode={interactionMode}
+            highlightColor={highlightColor}
+          // Pass delete functions if we want to delete from PDF view (e.g. click to delete)
+          // For now, let's just make sure deletions update state (Snapshot handles it)
+          />
         </div>
         <Toolbar
           currentPage={currentPage}
@@ -452,7 +604,7 @@ export function ReadingRoom({ roomId }: { roomId: string }) {
           setHighlightColor={setHighlightColor}
         />
       </main>
-      <ChatPanel messages={messages} addMessage={addMessage} currentUser={currentUser} />
-    </div>
+      <ChatPanel messages={messages} addMessage={addMessage} currentUser={currentUser} clearChat={clearChat} isOwner={isOwner} />
+    </div >
   );
 }

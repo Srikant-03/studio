@@ -5,26 +5,28 @@ import type { ChatMessage, User } from '@/types/hearthlink';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { SendHorizonal } from 'lucide-react';
+import { SendHorizonal, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
 interface ChatPanelProps {
   messages: ChatMessage[];
   addMessage: (message: { type: 'text' | 'system', message: string }) => void;
+  clearChat: () => void;
   currentUser: User | null;
+  isOwner: boolean;
 }
 
-export function ChatPanel({ messages, addMessage, currentUser }: ChatPanelProps) {
+export function ChatPanel({ messages, addMessage, clearChat, currentUser, isOwner }: ChatPanelProps) {
   const [newMessage, setNewMessage] = useState('');
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (scrollAreaRef.current) {
-        const viewport = scrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
-        if (viewport) {
-            viewport.scrollTop = viewport.scrollHeight;
-        }
+      const viewport = scrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
     }
   }, [messages]);
 
@@ -36,9 +38,22 @@ export function ChatPanel({ messages, addMessage, currentUser }: ChatPanelProps)
     }
   };
 
+  const handleClear = () => {
+    if (confirm("Are you sure you want to clear the chat? This cannot be undone.")) {
+      clearChat();
+    }
+  }
+
   return (
     <aside className="w-80 flex-shrink-0 bg-card/80 border-l flex flex-col h-full">
-      <h2 className="font-headline text-xl font-bold p-4 border-b">Fireside Chat</h2>
+      <div className="flex items-center justify-between p-4 border-b">
+        <h2 className="font-headline text-xl font-bold">Fireside Chat</h2>
+        {isOwner && (
+          <Button variant="ghost" size="icon" onClick={handleClear} title="Clear Chat">
+            <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+          </Button>
+        )}
+      </div>
       <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
         <div className="space-y-4">
           {messages.map(msg => (
@@ -52,21 +67,21 @@ export function ChatPanel({ messages, addMessage, currentUser }: ChatPanelProps)
             >
               {msg.type === 'text' && msg.userId !== currentUser?.id && (
                 <Avatar className="w-8 h-8">
-                  <AvatarFallback style={{ backgroundColor: `hsl(${msg.id.length * 20}, 70%, 80%)`}}>
+                  <AvatarFallback style={{ backgroundColor: `hsl(${msg.id.length * 20}, 70%, 80%)` }}>
                     {msg.userName.charAt(0)}
                   </AvatarFallback>
                 </Avatar>
               )}
               <div className={cn(
                 "max-w-[75%]",
-                 msg.userId === currentUser?.id && "text-right"
+                msg.userId === currentUser?.id ? "text-right ml-auto" : "text-left"
               )}>
                 {msg.type === 'text' && (
-                  <p className="font-bold text-xs" style={{ color: `hsl(${msg.id.length * 20}, 60%, 40%)`}}>{msg.userName}</p>
+                  <p className="font-bold text-xs" style={{ color: `hsl(${msg.id.length * 20}, 60%, 40%)` }}>{msg.userName}</p>
                 )}
                 <div className={cn(
-                    "p-2 rounded-lg",
-                    msg.type === 'text' && (msg.userId === currentUser?.id ? "bg-primary text-primary-foreground" : "bg-muted")
+                  "p-2 rounded-lg break-words",
+                  msg.type === 'text' && (msg.userId === currentUser?.id ? "bg-primary text-primary-foreground" : "bg-muted")
                 )}>
                   <p>{msg.message}</p>
                 </div>
@@ -76,6 +91,9 @@ export function ChatPanel({ messages, addMessage, currentUser }: ChatPanelProps)
               </div>
             </div>
           ))}
+          {messages.length === 0 && (
+            <p className="text-center text-muted-foreground text-sm italic mt-10">No messages yet. Start the conversation!</p>
+          )}
         </div>
       </ScrollArea>
       <div className="p-4 border-t">

@@ -14,52 +14,64 @@ body {
 
 @layer base {
   :root {
-    --background: 16 44% 8%;
-    --foreground: 48 100% 93%;
-    --card: 16 44% 11%;
-    --card-foreground: 48 100% 93%;
-    --popover: 16 44% 11%;
-    --popover-foreground: 48 100% 93%;
-    --primary: 25 76% 50%;
-    --primary-foreground: 48 100% 93%;
-    --secondary: 25 76% 20%;
-    --secondary-foreground: 48 100% 93%;
-    --muted: 25 76% 15%;
-    --muted-foreground: 48 100% 85%;
-    --accent: 348 83% 47%;
-    --accent-foreground: 48 100% 93%;
+    --background: 16 12% 8%;
+    /* #1c1816 Soft warm black */
+    --foreground: 36 60% 90%;
+    /* #f5e8d8 Warm beige */
+
+    --card: 16 12% 10%;
+    /* Slightly lighter than bg */
+    --card-foreground: 36 60% 90%;
+
+    --popover: 16 12% 10%;
+    --popover-foreground: 36 60% 90%;
+
+    --primary: 20 90% 55%;
+    /* #f55a16 Vibrant Orange-Red (Fire) */
+    --primary-foreground: 36 60% 95%;
+
+    --secondary: 20 30% 20%;
+    /* Deep warm brown */
+    --secondary-foreground: 36 60% 90%;
+
+    --muted: 20 20% 15%;
+    --muted-foreground: 20 20% 70%;
+
+    --accent: 35 90% 50%;
+    /* #f2a900 Golden Flame */
+    --accent-foreground: 20 10% 10%;
+
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 25 76% 25%;
-    --input: 25 76% 25%;
-    --ring: 25 76% 50%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+
+    --border: 20 20% 20%;
+    --input: 20 20% 20%;
+    --ring: 20 90% 55%;
+
     --radius: 0.5rem;
   }
+
   .dark {
-    --background: 16 44% 8%;
-    --foreground: 48 100% 93%;
-    --card: 16 44% 11%;
-    --card-foreground: 48 100% 93%;
-    --popover: 16 44% 11%;
-    --popover-foreground: 48 100% 93%;
-    --primary: 25 76% 50%;
-    --primary-foreground: 48 100% 93%;
-    --secondary: 25 76% 20%;
-    --secondary-foreground: 48 100% 93%;
-    --muted: 25 76% 15%;
-    --muted-foreground: 48 100% 85%;
-    --accent: 348 83% 47%;
-    --accent-foreground: 48 100% 93%;
+    /* Same as root for now since the whole app is effectively dark mode by default */
+    --background: 16 12% 8%;
+    --foreground: 36 60% 90%;
+    --card: 16 12% 10%;
+    --card-foreground: 36 60% 90%;
+    --popover: 16 12% 10%;
+    --popover-foreground: 36 60% 90%;
+    --primary: 20 90% 55%;
+    --primary-foreground: 36 60% 95%;
+    --secondary: 20 30% 20%;
+    --secondary-foreground: 36 60% 90%;
+    --muted: 20 20% 15%;
+    --muted-foreground: 20 20% 70%;
+    --accent: 35 90% 50%;
+    --accent-foreground: 20 10% 10%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 25 76% 25%;
-    --input: 25 76% 25%;
-    --ring: 25 76% 50%;
+    --border: 20 20% 20%;
+    --input: 20 20% 20%;
+    --ring: 20 90% 55%;
   }
 }
 
@@ -94,6 +106,7 @@ body {
     transform-origin: left;
     opacity: 0;
   }
+
   to {
     transform: rotateY(0deg);
     transform-origin: left;
@@ -150,6 +163,126 @@ body {
 }
 
 @keyframes flicker {
-  0%, 100% { transform: translateX(-50%) scale(1); opacity: 0.8; }
-  50% { transform: translateX(-50%) scale(1.1); opacity: 1; }
+
+  0%,
+  100% {
+    transform: translateX(-50%) scale(1);
+    opacity: 0.8;
+  }
+
+  50% {
+    transform: translateX(-50%) scale(1.1);
+    opacity: 1;
+  }
+}
+
+/* 3D Book Flip Styles */
+:root {
+  --book-width: 600px;
+  /* Reduced from 60 * 12px for better fit */
+  --book-height: 800px;
+  --page-bg: #F5F5F5;
+  --dark-text: #2A2935;
+  --baseline: 12px;
+  --book-title: 'Tulpen One', sans-serif;
+  --title: 'Cormorant Garamond', serif;
+  --body: 'Cormorant Garamond', serif;
+}
+
+.book-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 1200px;
+  width: 100%;
+  height: 100%;
+  /* Ensure it doesn't overflow parent */
+  overflow: visible;
+}
+
+.book {
+  position: relative;
+  width: var(--book-width);
+  height: var(--book-height);
+  transform-style: preserve-3d;
+  box-shadow: 0 0 100px rgba(0, 0, 0, 0.3);
+  transition: transform 0.5s;
+}
+
+.book__page {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform-origin: left center;
+  transition: transform 0.9s cubic-bezier(0.645, 0.045, 0.355, 1);
+  background-color: var(--page-bg);
+  background-image: linear-gradient(90deg, rgba(227, 227, 227, 1) 0%, rgba(247, 247, 247, 0) 18%);
+  /* Hide backface so we can see the next page */
+  backface-visibility: hidden;
+  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+}
+
+/* Front of the page (Right side when open) */
+.book__page--front {
+  z-index: 1;
+}
+
+/* Back of the page (Left side when flipped) */
+.book__page--back {
+  z-index: 0;
+  transform: rotateY(180deg);
+  /* Start flipped */
+}
+
+/* When a page is "flipped", it rotates -180deg. 
+   React state will handle applying a .flipped class 
+*/
+.book__page.flipped {
+  transform: rotateY(-180deg);
+  z-index: 2;
+  /* Bring to top during flip */
+}
+
+.book-content {
+  width: 100%;
+  height: 100%;
+  padding: 20px;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Specific styling for React PDF canvas to fit */
+.book-content canvas {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain;
+}
+
+@keyframes floatUp {
+  0% {
+    opacity: 0;
+    transform: translateY(105vh) translateX(var(--particle-x-start)) scale(0.5);
+  }
+
+  10% {
+    opacity: 0.8;
+    transform: translateY(90vh) translateX(calc(var(--particle-x-start) + 2vw)) scale(1);
+  }
+
+  50% {
+    opacity: 0.6;
+    transform: translateY(50vh) translateX(calc(var(--particle-x-start) - 2vw)) scale(0.8);
+  }
+
+  90% {
+    opacity: 0;
+    transform: translateY(10vh) translateX(calc(var(--particle-x-start) + 1vw)) scale(0.3);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-10vh) translateX(var(--particle-x-end)) scale(0);
+  }
 }

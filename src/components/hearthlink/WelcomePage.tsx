@@ -8,9 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { FireplaceIcon } from "@/components/icons";
-import { FileUp, Loader2, Book, LogOut } from "lucide-react";
+import { FileUp, Loader2, Book, LogOut, Trash2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import { createRoom, joinRoom, getUserRooms } from "@/lib/rooms";
+import { createRoom, joinRoom, getUserRooms, deleteRoom } from "@/lib/rooms";
 import type { Room } from "@/types/hearthlink";
 import { ScrollArea } from "../ui/scroll-area";
 import { toast } from "@/hooks/use-toast";
@@ -18,7 +18,7 @@ import { toast } from "@/hooks/use-toast";
 export function WelcomePage() {
   const router = useRouter();
   const { user, loading, logout } = useAuth();
-  
+
   const [roomName, setRoomName] = useState("");
   const [joinRoomId, setJoinRoomId] = useState("");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -42,12 +42,12 @@ export function WelcomePage() {
         console.error("Failed to get user rooms", err);
         let errorMessage = "Could not fetch your rooms. Please try again.";
         if (err.message.includes('offline')) {
-            errorMessage = "Could not connect to the database. Please check your Firebase project settings."
+          errorMessage = "Could not connect to the database. Please check your Firebase project settings."
         }
         toast({
-            variant: "destructive",
-            title: "Database Error",
-            description: errorMessage,
+          variant: "destructive",
+          title: "Database Error",
+          description: errorMessage,
         })
       }).finally(() => {
         setIsLoadingRooms(false);
@@ -61,7 +61,7 @@ export function WelcomePage() {
       setIsCreating(true);
       try {
         const newRoomId = await createRoom(roomName, pdfFile.name, user.id);
-        router.push(`/room/${newRoomId}`);
+        router.push(`/room?id=${newRoomId}`);
       } catch (error) {
         console.error("Failed to create room:", error);
         alert("Error: Could not create the room. Please try again.");
@@ -73,14 +73,31 @@ export function WelcomePage() {
     }
   };
 
+  const handleDeleteRoom = async (roomId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent navigating to room
+    if (!confirm("Are you sure you want to delete this room? This cannot be undone.")) return;
+
+    if (user) {
+      try {
+        await deleteRoom(roomId, user.id);
+        setUserRooms(prev => prev.filter(r => r.id !== roomId));
+        toast({ title: "Room Deleted", description: "The room has been deleted." });
+      } catch (error) {
+        console.error("Failed to delete room:", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not delete room." });
+      }
+    }
+  };
+
   const handleJoinRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     if (joinRoomId && user) {
       setIsJoining(true);
       try {
-        const success = await joinRoom(joinRoomId, user.id);
+        const trimmedId = joinRoomId.trim();
+        const success = await joinRoom(trimmedId, user.id);
         if (success) {
-          router.push(`/room/${joinRoomId}`);
+          router.push(`/room?id=${trimmedId}`);
         } else {
           alert("Could not find the room. Please check the code.");
         }
@@ -104,13 +121,13 @@ export function WelcomePage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center bg-background p-4 font-body pt-20">
-        <div className="absolute top-4 right-4 flex items-center gap-4">
-            <span className="text-sm font-medium">Welcome, {user.name}</span>
-            <Button variant="ghost" size="icon" onClick={logout} aria-label="Log out">
-                <LogOut className="h-5 w-5" />
-            </Button>
-        </div>
+    <div className="flex min-h-screen flex-col items-center p-4 font-body pt-20">
+      <div className="absolute top-4 right-4 flex items-center gap-4">
+        <span className="text-sm font-medium">Welcome, {user.name}</span>
+        <Button variant="ghost" size="icon" onClick={logout} aria-label="Log out">
+          <LogOut className="h-5 w-5" />
+        </Button>
+      </div>
       <div className="flex flex-col items-center text-center mb-8">
         <FireplaceIcon className="h-20 w-20 text-primary mb-4" />
         <h1 className="text-5xl font-headline font-bold text-foreground">
@@ -123,38 +140,45 @@ export function WelcomePage() {
 
       <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8">
         <Card className="shadow-xl bg-card/80 backdrop-blur-sm">
-            <CardHeader>
-                <CardTitle className="font-headline text-2xl">Your Bookshelves</CardTitle>
-                <CardDescription>Rejoin a reading session.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                {isLoadingRooms ? (
-                    <div className="flex items-center justify-center h-40">
-                        <Loader2 className="h-8 w-8 animate-spin" />
-                    </div>
-                ) : userRooms.length > 0 ? (
-                    <ScrollArea className="h-64 pr-4">
-                        <ul className="space-y-3">
-                            {userRooms.map(room => (
-                                <li key={room.id}>
-                                    <Button variant="outline" className="w-full justify-start h-auto py-3" onClick={() => router.push(`/room/${room.id}`)}>
-                                        <Book className="mr-4 flex-shrink-0" />
-                                        <div className="text-left overflow-hidden">
-                                            <p className="font-semibold truncate">{room.name}</p>
-                                            <p className="text-xs text-muted-foreground truncate">{room.pdfName}</p>
-                                        </div>
-                                    </Button>
-                                </li>
-                            ))}
-                        </ul>
-                    </ScrollArea>
-                ) : (
-                    <div className="text-muted-foreground text-center h-40 flex items-center justify-center">
-                      <p>You haven't joined any rooms yet. <br/> Create one or join one to get started!</p>
-                    </div>
-                )}
-            </CardContent>
+          <CardHeader>
+            <CardTitle className="font-headline text-2xl">Your Bookshelves</CardTitle>
+            <CardDescription>Rejoin a reading session.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoadingRooms ? (
+              <div className="flex items-center justify-center h-40">
+                <Loader2 className="h-8 w-8 animate-spin" />
+              </div>
+            ) : userRooms.length > 0 ? (
+              <ScrollArea className="h-64 pr-4">
+                <ul className="space-y-3">
+                  {userRooms.map(room => (
+                    <li key={room.id} className="flex items-center gap-2 group">
+                      <Button variant="outline" className="flex-1 justify-start h-auto py-3 bg-card/50 hover:bg-card/80 transition-colors" onClick={() => router.push(`/room?id=${room.id}`)}>
+                        <Book className="mr-4 flex-shrink-0" />
+                        <div className="text-left overflow-hidden">
+                          <p className="font-semibold truncate">{room.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">{room.pdfName}</p>
+                        </div>
+                      </Button>
+                      {room.creatorId === user?.id && (
+                        <Button variant="destructive" size="sm" onClick={(e) => handleDeleteRoom(room.id, e)} title="Delete Room" className="shrink-0 flex items-center gap-2 px-2">
+                          <Trash2 className="h-4 w-4" />
+                          <span className="hidden group-hover:inline md:inline">Delete</span>
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </ScrollArea>
+            ) : (
+              <div className="text-muted-foreground text-center h-40 flex items-center justify-center">
+                <p>You haven't joined any rooms yet. <br /> Create one or join one to get started!</p>
+              </div>
+            )}
+          </CardContent>
         </Card>
+
 
         <Card className="shadow-xl bg-card/80 backdrop-blur-sm">
           <CardHeader>
@@ -177,7 +201,7 @@ export function WelcomePage() {
                     <Label htmlFor="pdf-file">Book (PDF)</Label>
                     <Input id="pdf-file" type="file" accept=".pdf" onChange={(e) => { const file = e.target.files?.[0]; if (file) { setPdfFile(file); } }} required className="hidden" />
                     <Button type="button" variant="outline" className="w-full justify-start text-left font-normal" onClick={() => document.getElementById('pdf-file')?.click()}>
-                      <FileUp className="mr-2 h-4 w-4"/>
+                      <FileUp className="mr-2 h-4 w-4" />
                       <span className="truncate">{pdfFile ? pdfFile.name : "Select a PDF file"}</span>
                     </Button>
                     <p className="text-xs text-muted-foreground">The book will be available to all members of the room.</p>
